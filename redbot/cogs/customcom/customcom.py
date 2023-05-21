@@ -273,7 +273,6 @@ class CustomCommands(commands.Cog):
         This is helpful for copy and pasting.
 
         **Arguments:**
-
         - `<command>` The custom command to get the raw response of."""
         commands = await self.config.guild(ctx.guild).commands()
         if command not in commands:
@@ -320,7 +319,6 @@ class CustomCommands(commands.Cog):
         Uses fuzzy searching to find close matches.
 
         **Arguments:**
-
         - `<query>` The query to search for. Can be multiple words.
         """
         cc_commands = await CommandObj.get_commands(self.config.guild(ctx.guild))
@@ -365,7 +363,6 @@ class CustomCommands(commands.Cog):
         Note: This command is interactive.
 
         **Arguments:**
-
         - `<command>` The command executed to return the text. Cast to lowercase.
         """
         if any(char.isspace() for char in command):
@@ -405,7 +402,6 @@ class CustomCommands(commands.Cog):
         - `[p]customcom create simple yourcommand Text you want`
 
         **Arguments:**
-
         - `<command>` The command executed to return the text. Cast to lowercase.
         - `<text>` The text to return when executing the command. See guide for enhanced usage.
         """
@@ -452,7 +448,6 @@ class CustomCommands(commands.Cog):
         - `[p]cc cooldown mycommand 30 guild`
 
         **Arguments:**
-
         - `<command>` The custom command to check or set the cooldown.
         - `[cooldown]` The number of seconds to wait before allowing the command to be invoked again. If omitted, will instead return the current cooldown settings.
         - `[per]` The group to apply the cooldown on. Defaults to per member. Valid choices are server / guild, user / member, and channel.
@@ -495,7 +490,6 @@ class CustomCommands(commands.Cog):
         - `[p]customcom delete yourcommand`
 
         **Arguments:**
-
         - `<command>` The custom command to delete.
         """
         try:
@@ -513,7 +507,6 @@ class CustomCommands(commands.Cog):
         - `[p]customcom edit yourcommand Text you want`
 
         **Arguments:**
-
         - `<command>` The custom command to edit.
         - `<text>` The new text to return when executing the command.
         """
@@ -583,7 +576,6 @@ class CustomCommands(commands.Cog):
         """Shows a custom command's responses and its settings.
 
         **Arguments:**
-
         - `<command_name>` The custom command to show.
         """
 

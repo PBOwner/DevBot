@@ -7,7 +7,7 @@ import discord
 
 from redbot.core import commands, Config
 from redbot.core.bot import Red
-from redbot.core.commands import positive_int, RawUserIdConverter
+from redbot.core.commands import RawUserIdConverter, positive_int
 from redbot.core.i18n import Translator, cog_i18n
 from redbot.core.utils.chat_formatting import humanize_number
 from redbot.core.utils.mod import slow_deletion, mass_purge
@@ -179,7 +179,7 @@ class Cleanup(commands.Cog):
                 pass
         return message
 
-    @commands.group()
+    @commands.group(aliases=["purge"])
     async def cleanup(self, ctx: commands.Context):
         """Base command for deleting messages."""
         pass
@@ -199,7 +199,6 @@ class Cleanup(commands.Cog):
         Remember to use double quotes.
 
         **Arguments:**
-
         - `<number>` The max number of messages to cleanup. Must be a positive integer.
         - `<delete_pinned>` Whether to delete pinned messages or not. Defaults to False
         """
@@ -258,7 +257,6 @@ class Cleanup(commands.Cog):
         - `[p]cleanup user Red 6`
 
         **Arguments:**
-
         - `<user>` The user whose messages are to be cleaned up.
         - `<number>` The max number of messages to cleanup. Must be a positive integer.
         - `<delete_pinned>` Whether to delete pinned messages or not. Defaults to False
@@ -329,7 +327,6 @@ class Cleanup(commands.Cog):
         Replying to a message will cleanup all messages after it.
 
         **Arguments:**
-
         - `<message_id>` The id of the message to cleanup after. This message won't be deleted.
         - `<delete_pinned>` Whether to delete pinned messages or not. Defaults to False
         """
@@ -377,13 +374,11 @@ class Cleanup(commands.Cog):
     ):
         """Deletes X messages before the specified message.
 
-        To get a message id, enable developer mode in Discord's
-        settings, 'appearance' tab. Then right click a message
-        and copy its id.
+        To get a message id, enable developer mode in Discord's settings,
+        'appearance' tab. Then right click a message and copy its id.
         Replying to a message will cleanup all messages before it.
 
         **Arguments:**
-
         - `<message_id>` The id of the message to cleanup before. This message won't be deleted.
         - `<number>` The max number of messages to cleanup. Must be a positive integer.
         - `<delete_pinned>` Whether to delete pinned messages or not. Defaults to False
@@ -439,7 +434,6 @@ class Cleanup(commands.Cog):
         - `[p]cleanup between 123456789123456789 987654321987654321`
 
         **Arguments:**
-
         - `<one>` The id of the message to cleanup after. This message won't be deleted.
         - `<two>` The id of the message to cleanup before. This message won't be deleted.
         - `<delete_pinned>` Whether to delete pinned messages or not. Defaults to False
@@ -486,7 +480,6 @@ class Cleanup(commands.Cog):
         - `[p]cleanup messages 26`
 
         **Arguments:**
-
         - `<number>` The max number of messages to cleanup. Must be a positive integer.
         - `<delete_pinned>` Whether to delete pinned messages or not. Defaults to False
         """
@@ -524,7 +517,6 @@ class Cleanup(commands.Cog):
         Can only cleanup custom commands and alias commands if those cogs are loaded.
 
         **Arguments:**
-
         - `<number>` The max number of messages to cleanup. Must be a positive integer.
         - `<delete_pinned>` Whether to delete pinned messages or not. Defaults to False
         """
@@ -619,7 +611,6 @@ class Cleanup(commands.Cog):
         - `[p]cleanup self 7 "" True`
 
         **Arguments:**
-
         - `<number>` The max number of messages to cleanup. Must be a positive integer.
         - `<match_pattern>` The text that messages must contain to be deleted. Use "" to skip this.
         - `<delete_pinned>` Whether to delete pinned messages or not. Defaults to False
@@ -700,7 +691,6 @@ class Cleanup(commands.Cog):
         Defaults to 50.
 
         **Arguments:**
-
         - `<number>` The number of messages to check for duplicates. Must be a positive integer.
         """
         msgs = []

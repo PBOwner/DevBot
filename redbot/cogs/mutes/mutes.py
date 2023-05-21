@@ -262,6 +262,7 @@ class Mutes(VoiceMutes, commands.Cog, metaclass=CompositeMetaClass):
         inside our tasks.
         """
         log.debug("Cleaning unmute tasks")
+        is_debug = log.getEffectiveLevel() <= logging.DEBUG
         for task_id in list(self._unmute_tasks.keys()):
             task = self._unmute_tasks[task_id]
 
@@ -272,8 +273,9 @@ class Mutes(VoiceMutes, commands.Cog, metaclass=CompositeMetaClass):
             if task.done():
                 try:
                     r = task.result()
-                except Exception as exc:
-                    log.error("An unexpected error occurred in the unmute task", exc_info=exc)
+                except Exception:
+                    if is_debug:
+                        log.exception("Dead task when trying to unmute")
                 self._unmute_tasks.pop(task_id, None)
 
     async def _handle_server_unmutes(self):
@@ -860,7 +862,11 @@ class Mutes(VoiceMutes, commands.Cog, metaclass=CompositeMetaClass):
         self,
         ctx: commands.Context,
         channel: Optional[
-            Union[discord.TextChannel, discord.VoiceChannel, discord.StageChannel]
+            Union[
+                discord.TextChannel,
+                discord.VoiceChannel,
+                discord.StageChannel,
+            ]
         ] = None,
     ):
         """
@@ -1867,7 +1873,7 @@ class Mutes(VoiceMutes, commands.Cog, metaclass=CompositeMetaClass):
                 "channel": channel,
                 "reason": _(MUTE_UNMUTE_ISSUES["already_unmuted"]),
             }
-        if not current_mute.get("voice_mute", False) and voice_mute:
+        if not current_mute["voice_mute"] and voice_mute:
             return {
                 "success": False,
                 "channel": channel,

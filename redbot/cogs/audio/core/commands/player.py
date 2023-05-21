@@ -11,8 +11,7 @@ from red_commons.logging import getLogger
 
 from lavalink import NodeNotFound
 
-from redbot.core import commands
-from redbot.core.commands import UserInputOptional
+from redbot.core import app_commands, commands
 from redbot.core.i18n import Translator
 from redbot.core.utils import AsyncIter
 from redbot.core.utils.menus import close_menu, menu, next_page, prev_page
@@ -32,7 +31,8 @@ _ = Translator("Audio", Path(__file__))
 
 
 class PlayerCommands(MixinMeta, metaclass=CompositeMetaClass):
-    @commands.command(name="play")
+    @commands.hybrid_command(name="play")
+    @app_commands.describe(query="The query to play.")
     @commands.guild_only()
     @commands.bot_has_permissions(embed_links=True)
     async def command_play(self, ctx: commands.Context, *, query: str):
@@ -65,39 +65,41 @@ class PlayerCommands(MixinMeta, metaclass=CompositeMetaClass):
             )
         if not self._player_check(ctx):
             if self.lavalink_connection_aborted:
-                msg = _("Connection to Lavalink node has failed")
+                msg = _("Connection To Lavalink Node Has Failed")
                 desc = None
                 if await self.bot.is_owner(ctx.author):
                     desc = _("Please check your console or logs for details.")
                 return await self.send_embed_msg(ctx, title=msg, description=desc)
+            channel = ctx.author.voice.channel
             try:
                 if (
-                    not self.can_join_and_speak(ctx.author.voice.channel)
+                    not self.can_join_and_speak(channel)
                     or not ctx.author.voice.channel.permissions_for(ctx.me).move_members
-                    and self.is_vc_full(ctx.author.voice.channel)
+                    and self.is_vc_full(channel)
                 ):
                     return await self.send_embed_msg(
                         ctx,
                         title=_("Unable To Play Tracks"),
-                        description=_(
-                            "I don't have permission to connect and speak in your channel."
+                        description=(
+                            f"I don't have permission to connect and speak in {channel.mention}"
                         ),
                     )
                 await lavalink.connect(
-                    ctx.author.voice.channel,
+                    channel,
                     self_deaf=await self.config.guild_from_id(ctx.guild.id).auto_deafen(),
                 )
+                await self.send_embed_msg(ctx, description=f"Connected to {channel.mention}")
             except AttributeError:
                 return await self.send_embed_msg(
                     ctx,
                     title=_("Unable To Play Tracks"),
-                    description=_("Connect to a voice channel first."),
+                    description=_("Please connect to a voice channel first."),
                 )
             except NodeNotFound:
                 return await self.send_embed_msg(
                     ctx,
                     title=_("Unable To Play Tracks"),
-                    description=_("Connection to the Lavalink node has not yet been established."),
+                    description=_("Connection to the Lavalink node hasn't been established yet."),
                 )
         player = lavalink.get_player(ctx.guild.id)
         player.store("notify_channel", ctx.channel.id)
@@ -127,6 +129,7 @@ class PlayerCommands(MixinMeta, metaclass=CompositeMetaClass):
         if query.is_spotify:
             return await self._get_spotify_tracks(ctx, query)
         try:
+            await ctx.tick()
             await self._enqueue_tracks(ctx, query)
         except QueryUnauthorized as exc:
             return await self.send_embed_msg(
@@ -136,12 +139,13 @@ class PlayerCommands(MixinMeta, metaclass=CompositeMetaClass):
             self.update_player_lock(ctx, False)
             raise e
 
-    @commands.command(name="bumpplay")
+    @commands.hybrid_command(name="bumpplay")
+    @app_commands.describe(
+        play_now="Either to play the track now or later.", query="The query to play."
+    )
     @commands.guild_only()
     @commands.bot_has_permissions(embed_links=True)
-    async def command_bumpplay(
-        self, ctx: commands.Context, play_now: UserInputOptional[bool] = False, *, query: str
-    ):
+    async def command_bumpplay(self, ctx: commands.Context, play_now: bool = False, *, query: str):
         """Force play a URL or search for a track."""
         query = Query.process_input(query, self.local_folder_current_path)
         if not query.single_track:
@@ -348,7 +352,7 @@ class PlayerCommands(MixinMeta, metaclass=CompositeMetaClass):
 
         self.update_player_lock(ctx, False)
 
-    @commands.command(name="genre")
+    @commands.hybrid_command(name="genre")
     @commands.guild_only()
     @commands.bot_has_permissions(embed_links=True)
     async def command_genre(self, ctx: commands.Context):
@@ -537,10 +541,9 @@ class PlayerCommands(MixinMeta, metaclass=CompositeMetaClass):
             ctx, title=_("Couldn't find tracks for the selected playlist.")
         )
 
-    @commands.command(name="autoplay")
+    @commands.hybrid_command(name="autoplay")
     @commands.guild_only()
     @commands.bot_has_permissions(embed_links=True)
-    @commands.mod_or_permissions(manage_guild=True)
     async def command_autoplay(self, ctx: commands.Context):
         """Starts auto play."""
         guild_data = await self.config.guild(ctx.guild).all()
@@ -633,10 +636,10 @@ class PlayerCommands(MixinMeta, metaclass=CompositeMetaClass):
         elif player.current:
             await self.send_embed_msg(ctx, title=_("Adding a track to queue."))
 
-    @commands.command(name="search")
+    @commands.hybrid_command(name="search")
+    @app_commands.describe(query="The query to search.")
     @commands.guild_only()
-    @commands.bot_has_permissions(embed_links=True)
-    @commands.bot_can_react()
+    @commands.bot_has_permissions(add_reactions=True, embed_links=True)
     async def command_search(self, ctx: commands.Context, *, query: str):
         """Pick a track with a search.
 
@@ -660,8 +663,9 @@ class PlayerCommands(MixinMeta, metaclass=CompositeMetaClass):
         ):
             if message:
                 await self._search_button_action(ctx, tracks, emoji, page)
-                with contextlib.suppress(discord.HTTPException):
-                    await message.delete()
+                if not ctx.interaction:
+                    with contextlib.suppress(discord.HTTPException):
+                        await message.delete()
                 return None
 
         search_controls = {

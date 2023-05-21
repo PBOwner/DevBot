@@ -58,7 +58,7 @@ class LavalinkEvents(MixinMeta, metaclass=CompositeMetaClass):
             self._ll_guild_updates.discard(guild.id)
             return
         if event_type == lavalink.LavalinkEvents.WEBSOCKET_CLOSED:
-            deafen = guild_data["auto_deafen"]
+            self_deaf = guild_data["auto_deafen"]
             event_channel_id = extra.get("channelID")
             _error_code = extra.get("code")
             if _error_code in [1000] or not guild:
@@ -93,7 +93,7 @@ class LavalinkEvents(MixinMeta, metaclass=CompositeMetaClass):
                     guild=guild,
                     player=player,
                     extra=extra,
-                    self_deaf=deafen,
+                    self_deaf=self_deaf,
                     disconnect=disconnect,
                 )
             except Exception as exc:

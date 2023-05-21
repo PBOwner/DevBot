@@ -1,18 +1,64 @@
-import datetime
-from typing import cast
+from typing import Union, cast
 
 import discord
-from redbot.core import commands, i18n
+from discord.errors import NotFound
+from discord.ui import Button
+from discord.utils import escape_markdown as unmarkdown
+from redbot.core import bank, commands
+from redbot.core.utils.chat_formatting import humanize_list, humanize_number
 from redbot.core.utils.common_filters import (
+    escape_spoilers_and_mass_mentions,
     filter_invites,
     filter_various_mentions,
-    escape_spoilers_and_mass_mentions,
 )
 from redbot.core.utils.mod import get_audit_reason
+from redbot.core.utils.views import View, _StopButton
 from .abc import MixinMeta
 from .utils import is_allowed_by_hierarchy
 
-_ = i18n.Translator("Mod", __file__)
+STATUS_EMOJIS = {
+    "streaming": 749221434039205909,
+    "mobile_online": 947032955904229396,
+    "online": 749221433552404581,
+    "mobile_idle": 947032931526901760,
+    "idle": 749221433095356417,
+    "mobile_dnd": 947032903966134312,
+    "dnd": 749221432772395140,
+    "offline": 749221433049088082,
+}
+
+PROFILE_EMOJIS = {
+    "staff": 954383694284587078,
+    "partner": 954383655806066718,
+    "hypesquad": 954383838581231667,
+    "bug_hunter": 954383621916086312,
+    "hypesquad_bravery": 954383915068555294,
+    "hypesquad_brilliance": 954383900837314580,
+    "hypesquad_balance": 954383947343757354,
+    "early_supporter": 954384007922073630,
+    "bug_hunter_level_2": 954383608532049960,
+    "verified_bot_1": 933696996873732168,
+    "verified_bot_2": 933696948723134494,
+    "verified_bot_developer": 954383743865470986,
+    "discord_certified_moderator": 954383710105509898,
+    "active_developer": 1089609770174001274,
+    # Non-Flags:
+    "bot": 848557763172892722,
+}
+
+# FORMAT: {server_id: {role_id: [emoji_id, title]}}
+SPECIAL_BADGES = {
+    825535079719501824: {  # Kiki✨'s Support (ʚ﹕The Cloud House﹕ɞ)
+        954373039972298752: [954383743865470986, "Bot Developer"],
+        833755355711930378: [915138297355968574, "Support Staff"],
+        954374737700737075: [954383608532049960, "Bug Hunter"],
+        943331260590338058: [954398197751611413, "Bot Voter"],
+    },
+    133049272517001216: {  # Red - Discord Bot
+        346744009458450433: [917079459641831474, "Contributor"],
+        506598631726383105: [925401264395796481, "Cog Creator"],
+    },
+}
 
 
 class ModInfo(MixinMeta):
@@ -20,14 +66,378 @@ class ModInfo(MixinMeta):
     Commands regarding names, userinfo, etc.
     """
 
-    async def get_names_and_nicks(self, user):
+    async def get_names_and_nicks(
+        self, ctx: commands.Context, user: Union[discord.Member, discord.User]
+    ):
         names = await self.config.user(user).past_names()
-        nicks = await self.config.member(user).past_nicks()
+        nicks = None
+        if ctx.guild and ctx.guild.get_member(user.id):
+            nicks = await self.config.member(ctx.guild.get_member(user.id)).past_nicks()
         if names:
             names = [escape_spoilers_and_mass_mentions(name) for name in names if name]
         if nicks:
             nicks = [escape_spoilers_and_mass_mentions(nick) for nick in nicks if nick]
         return names, nicks
+
+    @staticmethod
+    def handle_custom(user: Union[discord.Member, discord.User]):
+        c_acts = [a for a in user.activities if a.type == discord.ActivityType.custom]
+        if not c_acts:
+            return None
+        a = c_acts[0]
+        if a.name and a.emoji:
+            return f"`Custom Status ` : {a.emoji} {unmarkdown(a.name)}"
+        return f"`Custom Status ` : {unmarkdown(a.name or a.emoji)}"
+
+    @staticmethod
+    def handle_streaming(user: Union[discord.Member, discord.User]):
+        s_acts = [a for a in user.activities if a.type == discord.ActivityType.streaming]
+        if not s_acts:
+            return None
+        s_act = s_acts[0]
+        if isinstance(s_act, discord.Streaming):
+            act = "`Streaming     ` : [{name}{sep}{game}]({url}){platform}".format(
+                name=unmarkdown(s_act.name) if s_act.name else "",
+                sep=" | " if s_act.game else "",
+                game=unmarkdown(s_act.game) if s_act.game else "",
+                url=s_act.url,
+                platform=f" on {s_act.platform}" if s_act.platform else "",
+            )
+            if not s_act.name and not s_act.game:
+                act = f"`Streaming     ` : {s_act.url}"
+        else:
+            act = f"`Streaming     ` : {s_act.name}"
+        return act
+
+    @staticmethod
+    def handle_listening(user: Union[discord.Member, discord.User]):
+        l_acts = [a for a in user.activities if a.type == discord.ActivityType.listening]
+        if not l_acts:
+            return None
+        l_act = l_acts[0]
+        if isinstance(l_act, discord.Spotify):
+            act = "`Listening to  ` : [{title}{sep}{artist}]({url})".format(
+                title=unmarkdown(l_act.title),
+                sep=" by " if l_act.artists else "",
+                artist=unmarkdown(humanize_list(l_act.artists)) if l_act.artists else "",
+                url=l_act.track_url,
+            )
+        else:
+            act = f"`Listening to  ` : {l_act.name}"
+        return act
+
+    @staticmethod
+    def handle_playing(user: Union[discord.Member, discord.User]):
+        p_acts = [a.name for a in user.activities if a.type == discord.ActivityType.playing]
+        if not p_acts:
+            return None
+        return f"`Playing       ` : {humanize_list(p_acts)}"
+
+    @staticmethod
+    def handle_watching(user: Union[discord.Member, discord.User]):
+        w_acts = [a.name for a in user.activities if a.type == discord.ActivityType.watching]
+        if not w_acts:
+            return None
+        return f"`Watching      ` : {humanize_list(w_acts)}"
+
+    @staticmethod
+    def handle_competing(user: Union[discord.Member, discord.User]):
+        c_acts = [a.name for a in user.activities if a.type == discord.ActivityType.competing]
+        if not c_acts:
+            return None
+        return f"`Competing in  ` : {humanize_list(c_acts)}"
+
+    def get_status_string(self, user: Union[discord.Member, discord.User]):
+        string = ""
+        for status in [
+            self.handle_custom(user),
+            self.handle_streaming(user),
+            self.handle_listening(user),
+            self.handle_playing(user),
+            self.handle_watching(user),
+            self.handle_competing(user),
+        ]:
+            if not status:
+                continue
+            string += f"{status}\n"
+        return string
+
+    @commands.command(aliases=["ui", "whois"])
+    @commands.bot_has_permissions(embed_links=True, use_external_emojis=True)
+    async def userinfo(
+        self,
+        ctx: commands.Context,
+        *,
+        user: Union[discord.Member, discord.User] = commands.Author,
+    ):
+        """Show information about a user.
+
+        This includes fields for status, discord join date, server join date, voice state and previous names/nicknames.
+
+        If the member has no roles, previous names or previous nicknames, these fields will be omitted.
+        """
+        guild = ctx.guild
+        created_on = "<t:{}>\n(<t:{}:R>)".format(int(user.created_at.timestamp()))
+        names, nicks = await self.get_names_and_nicks(ctx, user)
+
+        status_emoji = None
+        status_string = None
+        roles = None
+        name = str(user)
+        color = await ctx.embed_color()
+        member_number = None
+        voice_state = None
+        shared_guilds = None
+        joined_on = None
+        since_joined = None
+        user_joined = None
+
+        if guild and isinstance(user, discord.Member):
+            status = "offline"
+            if any(a.type is discord.ActivityType.streaming for a in user.activities):
+                status = "streaming"
+            elif user.status == discord.Status.online:
+                status = "mobile_online" if user.is_on_mobile() else "online"
+            elif user.status == discord.Status.idle:
+                status = "mobile_idle" if user.is_on_mobile() else "idle"
+            elif user.status == discord.Status.dnd:
+                status = "mobile_dnd" if user.is_on_mobile() else "dnd"
+            status_emoji = ctx.bot.get_emoji(STATUS_EMOJIS[status])
+
+            status_string = self.get_status_string(user)
+            roles = user.roles[-1:0:-1]
+            joined_on = "{}\n({} days ago)".format(user_joined, since_joined)
+            name = f"{name} ~ {user.nick}" if user.nick else name
+            color = user.color
+            member_number = sorted(guild.members, key=lambda m: m.joined_at).index(user) + 1
+            voice_state = user.voice
+            if user == guild.me:
+                shared_guilds = len(ctx.bot.guilds)
+            else:
+                shared_guilds = len(user.mutual_guilds)
+
+            if user.joined_at:
+                joined_on = "<t:{0}>\n(<t:{0}:R>)".format(int(user.joined_at.timestamp()))
+            else:
+                joined_on = "Unknown"
+        title = unmarkdown(name) + " "
+        if status_emoji:
+            title = f"{status_emoji} {unmarkdown(name)} "
+        description = status_string or ""
+        if shared_guilds:
+            description += f"`Shared Servers` : {shared_guilds}"
+
+        data = discord.Embed(title=title, description=description, color=color)
+        data.set_thumbnail(url=user.display_avatar.url)
+        data.add_field(name="Joined Discord on", value=created_on)
+        if joined_on:
+            data.add_field(name="Joined This Server on", value=joined_on)
+
+        role_str = None
+        if roles:
+            role_str = ", ".join([x.mention for x in roles])
+            if len(role_str) > 1024:
+                continuation_string = "and {nn} more roles."
+                available_length = 1024 - len(continuation_string)
+                role_chunks = []
+                remaining_roles = 0
+                for r in roles:
+                    chunk = f"{r.mention}, "
+                    if len(chunk) < available_length:
+                        available_length -= len(chunk)
+                        role_chunks.append(chunk)
+                    else:
+                        remaining_roles += 1
+                role_chunks.append(continuation_string.format(nn=remaining_roles))
+                role_str = "".join(role_chunks)
+
+        if role_str:
+            if len(roles) > 1:
+                data.add_field(name=f"Roles ({len(roles)})", value=role_str, inline=False)
+            else:
+                data.add_field(name="Role", value=role_str, inline=False)
+
+        if names:
+            value = filter_invites(", ".join(names))
+            if len(names) > 1:
+                data.add_field(name=f"Previous Names ({len(names)})", value=value, inline=False)
+            else:
+                data.add_field(name="Previous Name", value=value, inline=False)
+
+        if nicks:
+            value = filter_invites(", ".join(nicks))
+            if len(nicks) > 1:
+                data.add_field(
+                    name=f"Previous Nicknames ({len(nicks)})", value=value, inline=False
+                )
+            else:
+                data.add_field(name="Previous Nickname", value=value, inline=False)
+
+        if voice_state:
+            data.add_field(
+                name="Current Voice Channel",
+                value="{0.mention} (ID: {0.id})".format(voice_state.channel),
+                inline=False,
+            )
+
+        badges = user.public_flags.all()
+        flags_count = 0
+        badge_str = ""
+        if badges:
+            format_name = lambda name: name.replace("_", " ").title()
+            get_emoji = lambda name: ctx.bot.get_emoji(PROFILE_EMOJIS[name])
+
+            flags = [f.name for f in badges]
+            flags_count = len(flags)
+            if user.bot:
+                b1 = str(get_emoji("verified_bot_1"))
+                b2 = str(get_emoji("verified_bot_2"))
+                data.title += b1 + b2 if "verified_bot" in flags else str(get_emoji("bot"))
+                badge_str = None
+            else:
+                badge_str += "\n".join(
+                    [
+                        f"{get_emoji(flag)} {format_name(flag)}"
+                        if flag in PROFILE_EMOJIS
+                        else f"❓ {format_name(flag)}"
+                        for flag in flags
+                    ]
+                )
+        boosted_servers = []
+        for guild in ctx.bot.guilds:
+            member = guild.get_member(user.id)
+            if not member:
+                continue
+            boosting = member.premium_since
+            if not boosting:
+                continue
+            boosted_servers.append(guild)
+        if user.avatar and (user.avatar.is_animated() or user.banner or boosted_servers):
+            flags_count = len(flags) + 1
+            e = ctx.bot.get_emoji(710871154839126036)
+            badge_str += f"\n{e} Nitro Subscriber"
+        if badge_str:
+            if flags_count > 1:
+                data.add_field(name=f"Badges ({flags_count})", value=badge_str, inline=False)
+            else:
+                data.add_field(name="Badge", value=badge_str, inline=False)
+
+        special_badges = []
+        if not user.bot:
+            for guild_id, roles in SPECIAL_BADGES.items():
+                if (g := ctx.bot.get_guild(guild_id)) and (m := g.get_member(user.id)):
+                    for r in reversed(m.roles):
+                        if r.id in roles:
+                            role = roles[r.id]
+                            special_badges.append(f"{ctx.bot.get_emoji(role[0])} {role[1]}")
+            if (g := ctx.bot.get_guild(825535079719501824)) and g.get_member(user.id):
+                e = ctx.bot.get_emoji(915569880160436264)
+                special_badges.append(f"{e} [The Cloud House](https://discord.gg/Zef3pD8Yt5)")
+
+        if special_badges:
+            name = (
+                f"Special Badges ({len(special_badges)})"
+                if len(special_badges) > 1
+                else "Special Badge"
+            )
+            data.add_field(name=name, value="\n".join(special_badges))
+
+        if not user.bot and ctx.bot.get_cog("Economy"):
+            balance = await bank.get_balance(user)
+            currency = await bank.get_currency_name(guild)
+            bankstat = f"**Coins**: {humanize_number(balance)} {currency}"
+            if balance > 0:
+                data.add_field(name="Balance", value=bankstat, inline=False)
+
+        ordinal = lambda n: "%d%s" % (
+            n,
+            "tsnrhtdd"[(n // 10 % 10 != 1) * (n % 10 < 4) * n % 10 :: 4],
+        )
+
+        if member_number:
+            data.set_footer(text="{} Member | User ID: {}".format(ordinal(member_number), user.id))
+        else:
+            data.set_footer(text="User ID: {}".format(user.id))
+
+        view = View()
+        stop_button = _StopButton()
+        view.add_item(stop_button)
+        if user.avatar:
+            view.add_item(
+                Button(
+                    style=discord.ButtonStyle.link,
+                    label="User Avatar",
+                    url=user.avatar.with_format("png").url,
+                )
+            )
+        if isinstance(user, discord.Member) and user.guild_avatar:
+            view.add_item(
+                Button(
+                    style=discord.ButtonStyle.link,
+                    label="Server Avatar",
+                    url=user.guild_avatar.with_format("png").url,
+                )
+            )
+
+        # Banner is only available via bot.fetch_user()
+        user = await ctx.bot.fetch_user(user.id)
+        try:
+            member = await guild.fetch_member(user.id)
+        except NotFound:
+            member = None
+
+        if user.banner:
+            data.set_image(url=user.banner.with_size(4096).url)
+            view.add_item(
+                Button(
+                    style=discord.ButtonStyle.link,
+                    label="User Banner",
+                    url=user.banner.with_format("png").url,
+                )
+            )
+        if member and member.banner:
+            data.set_image(url=member.banner.with_size(4096).url)
+            view.add_item(
+                Button(
+                    style=discord.ButtonStyle.link,
+                    label="Server Banner",
+                    url=member.banner.with_format("png").url,
+                )
+            )
+
+        if len(view.children) > 3:
+            view.remove_item(stop_button)
+            view.add_item(_StopButton(row=1))
+        await view.start(ctx, embed=data)
+
+    @commands.command()
+    @commands.guild_only()
+    async def names(self, ctx: commands.Context, *, member: discord.Member = commands.Author):
+        """Show previous names and nicknames of a member."""
+        names, nicks = await self.get_names_and_nicks(ctx, member)
+        if not (names and nicks):
+            if member == ctx.author:
+                await ctx.send("You don't have any recorded name or nickname change.")
+            else:
+                await ctx.send("That member doesn't have any recorded name or nickname change.")
+        if await ctx.embed_requested():
+            embed = discord.Embed()
+            if names:
+                embed.add_field(name="Past Names", value=", ".join(names), inline=False)
+            if nicks:
+                embed.add_field(name="Past Nicknames", value=", ".join(nicks), inline=False)
+            await ctx.send(embed=embed)
+        else:
+            msg = ""
+            if names:
+                msg += "**Past 20 Names**:\n"
+                msg += ", ".join(names)
+            if nicks:
+                msg += "\n\n" if msg else ""
+                msg += "**Past 20 Nicknames**:\n"
+                msg += ", ".join(nicks)
+            if msg:
+                await ctx.send(filter_various_mentions(msg))
 
     @commands.command()
     @commands.guild_only()
@@ -43,7 +453,7 @@ class ModInfo(MixinMeta):
         if not nickname:
             nickname = None
         elif not 2 <= len(nickname) <= 32:
-            await ctx.send(_("Nicknames must be between 2 and 32 characters long."))
+            await ctx.send("Nicknames must be between 2 and 32 characters long.")
             return
         if not (
             (me.guild_permissions.manage_nicknames or me.guild_permissions.administrator)
@@ -51,279 +461,25 @@ class ModInfo(MixinMeta):
             and member != ctx.guild.owner
         ):
             await ctx.send(
-                _(
-                    "I do not have permission to rename that member. They may be higher than or "
-                    "equal to me in the role hierarchy."
-                )
+                "I do not have permission to rename that member. "
+                "They may be higher than or equal to me in the role hierarchy."
             )
         elif ctx.author != member and not await is_allowed_by_hierarchy(
             self.bot, self.config, ctx.guild, ctx.author, member
         ):
             await ctx.send(
-                _(
-                    "I cannot let you do that. You are "
-                    "not higher than the user in the role "
-                    "hierarchy."
-                )
+                "I cannot let you do that. You are not higher than the user in the role hierarchy."
             )
         else:
             try:
                 await member.edit(reason=get_audit_reason(ctx.author, None), nick=nickname)
             except discord.Forbidden:
                 # Just in case we missed something in the permissions check above
-                await ctx.send(_("I do not have permission to rename that member."))
+                await ctx.send("I don't have the permission to rename that member.")
             except discord.HTTPException as exc:
                 if exc.status == 400:  # BAD REQUEST
-                    await ctx.send(_("That nickname is invalid."))
+                    await ctx.send("That nickname is invalid.")
                 else:
-                    await ctx.send(_("An unexpected error has occurred."))
+                    await ctx.send("An unexpected error has occurred.")
             else:
-                await ctx.send(_("Done."))
-
-    def handle_custom(self, user):
-        a = [c for c in user.activities if c.type == discord.ActivityType.custom]
-        if not a:
-            return None, discord.ActivityType.custom
-        a = a[0]
-        c_status = None
-        if not a.name and not a.emoji:
-            return None, discord.ActivityType.custom
-        elif a.name and a.emoji:
-            c_status = _("Custom: {emoji} {name}").format(emoji=a.emoji, name=a.name)
-        elif a.emoji:
-            c_status = _("Custom: {emoji}").format(emoji=a.emoji)
-        elif a.name:
-            c_status = _("Custom: {name}").format(name=a.name)
-        return c_status, discord.ActivityType.custom
-
-    def handle_playing(self, user):
-        p_acts = [c for c in user.activities if c.type == discord.ActivityType.playing]
-        if not p_acts:
-            return None, discord.ActivityType.playing
-        p_act = p_acts[0]
-        act = _("Playing: {name}").format(name=p_act.name)
-        return act, discord.ActivityType.playing
-
-    def handle_streaming(self, user):
-        s_acts = [c for c in user.activities if c.type == discord.ActivityType.streaming]
-        if not s_acts:
-            return None, discord.ActivityType.streaming
-        s_act = s_acts[0]
-        if isinstance(s_act, discord.Streaming):
-            act = _("Streaming: [{name}{sep}{game}]({url})").format(
-                name=discord.utils.escape_markdown(s_act.name),
-                sep=" | " if s_act.game else "",
-                game=discord.utils.escape_markdown(s_act.game) if s_act.game else "",
-                url=s_act.url,
-            )
-        else:
-            act = _("Streaming: {name}").format(name=s_act.name)
-        return act, discord.ActivityType.streaming
-
-    def handle_listening(self, user):
-        l_acts = [c for c in user.activities if c.type == discord.ActivityType.listening]
-        if not l_acts:
-            return None, discord.ActivityType.listening
-        l_act = l_acts[0]
-        if isinstance(l_act, discord.Spotify):
-            act = _("Listening: [{title}{sep}{artist}]({url})").format(
-                title=discord.utils.escape_markdown(l_act.title),
-                sep=" | " if l_act.artist else "",
-                artist=discord.utils.escape_markdown(l_act.artist) if l_act.artist else "",
-                url=f"https://open.spotify.com/track/{l_act.track_id}",
-            )
-        else:
-            act = _("Listening: {title}").format(title=l_act.name)
-        return act, discord.ActivityType.listening
-
-    def handle_watching(self, user):
-        w_acts = [c for c in user.activities if c.type == discord.ActivityType.watching]
-        if not w_acts:
-            return None, discord.ActivityType.watching
-        w_act = w_acts[0]
-        act = _("Watching: {name}").format(name=w_act.name)
-        return act, discord.ActivityType.watching
-
-    def handle_competing(self, user):
-        w_acts = [c for c in user.activities if c.type == discord.ActivityType.competing]
-        if not w_acts:
-            return None, discord.ActivityType.competing
-        w_act = w_acts[0]
-        act = _("Competing in: {competing}").format(competing=w_act.name)
-        return act, discord.ActivityType.competing
-
-    def get_status_string(self, user):
-        string = ""
-        for a in [
-            self.handle_custom(user),
-            self.handle_playing(user),
-            self.handle_listening(user),
-            self.handle_streaming(user),
-            self.handle_watching(user),
-            self.handle_competing(user),
-        ]:
-            status_string, status_type = a
-            if status_string is None:
-                continue
-            string += f"{status_string}\n"
-        return string
-
-    @commands.command()
-    @commands.guild_only()
-    @commands.bot_has_permissions(embed_links=True)
-    async def userinfo(self, ctx, *, member: discord.Member = None):
-        """Show information about a member.
-
-        This includes fields for status, discord join date, server
-        join date, voice state and previous names/nicknames.
-
-        If the member has no roles, previous names or previous nicknames,
-        these fields will be omitted.
-        """
-        author = ctx.author
-        guild = ctx.guild
-
-        if not member:
-            member = author
-
-        #  A special case for a special someone :^)
-        special_date = datetime.datetime(2016, 1, 10, 6, 8, 4, 443000, datetime.timezone.utc)
-        is_special = member.id == 96130341705637888 and guild.id == 133049272517001216
-
-        roles = member.roles[-1:0:-1]
-        names, nicks = await self.get_names_and_nicks(member)
-
-        if is_special:
-            joined_at = special_date
-        else:
-            joined_at = member.joined_at
-        voice_state = member.voice
-        member_number = (
-            sorted(guild.members, key=lambda m: m.joined_at or ctx.message.created_at).index(
-                member
-            )
-            + 1
-        )
-
-        created_on = (
-            f"{discord.utils.format_dt(member.created_at)}\n"
-            f"{discord.utils.format_dt(member.created_at, 'R')}"
-        )
-        if joined_at is not None:
-            joined_on = (
-                f"{discord.utils.format_dt(joined_at)}\n"
-                f"{discord.utils.format_dt(joined_at, 'R')}"
-            )
-        else:
-            joined_on = _("Unknown")
-
-        if any(a.type is discord.ActivityType.streaming for a in member.activities):
-            statusemoji = "\N{LARGE PURPLE CIRCLE}"
-        elif member.status.name == "online":
-            statusemoji = "\N{LARGE GREEN CIRCLE}"
-        elif member.status.name == "offline":
-            statusemoji = "\N{MEDIUM WHITE CIRCLE}\N{VARIATION SELECTOR-16}"
-        elif member.status.name == "dnd":
-            statusemoji = "\N{LARGE RED CIRCLE}"
-        elif member.status.name == "idle":
-            statusemoji = "\N{LARGE ORANGE CIRCLE}"
-        activity = _("Chilling in {} status").format(member.status)
-        status_string = self.get_status_string(member)
-
-        if roles:
-            role_str = ", ".join([x.mention for x in roles])
-            # 400 BAD REQUEST (error code: 50035): Invalid Form Body
-            # In embed.fields.2.value: Must be 1024 or fewer in length.
-            if len(role_str) > 1024:
-                # Alternative string building time.
-                # This is not the most optimal, but if you're hitting this, you are losing more time
-                # to every single check running on users than the occasional user info invoke
-                # We don't start by building this way, since the number of times we hit this should be
-                # infinitesimally small compared to when we don't across all uses of Red.
-                continuation_string = _(
-                    "and {numeric_number} more roles not displayed due to embed limits."
-                )
-                available_length = 1024 - len(continuation_string)  # do not attempt to tweak, i18n
-
-                role_chunks = []
-                remaining_roles = 0
-
-                for r in roles:
-                    chunk = f"{r.mention}, "
-                    chunk_size = len(chunk)
-
-                    if chunk_size < available_length:
-                        available_length -= chunk_size
-                        role_chunks.append(chunk)
-                    else:
-                        remaining_roles += 1
-
-                role_chunks.append(continuation_string.format(numeric_number=remaining_roles))
-
-                role_str = "".join(role_chunks)
-
-        else:
-            role_str = None
-
-        data = discord.Embed(description=status_string or activity, colour=member.colour)
-
-        data.add_field(name=_("Joined Discord on"), value=created_on)
-        data.add_field(name=_("Joined this server on"), value=joined_on)
-        if role_str is not None:
-            data.add_field(
-                name=_("Roles") if len(roles) > 1 else _("Role"), value=role_str, inline=False
-            )
-        if names:
-            # May need sanitizing later, but mentions do not ping in embeds currently
-            val = filter_invites(", ".join(names))
-            data.add_field(
-                name=_("Previous Names") if len(names) > 1 else _("Previous Name"),
-                value=val,
-                inline=False,
-            )
-        if nicks:
-            # May need sanitizing later, but mentions do not ping in embeds currently
-            val = filter_invites(", ".join(nicks))
-            data.add_field(
-                name=_("Previous Nicknames") if len(nicks) > 1 else _("Previous Nickname"),
-                value=val,
-                inline=False,
-            )
-        if voice_state and voice_state.channel:
-            data.add_field(
-                name=_("Current voice channel"),
-                value="{0.mention} ID: {0.id}".format(voice_state.channel),
-                inline=False,
-            )
-        data.set_footer(text=_("Member #{} | User ID: {}").format(member_number, member.id))
-
-        name = str(member)
-        name = " ~ ".join((name, member.nick)) if member.nick else name
-        name = filter_invites(name)
-
-        avatar = member.display_avatar.replace(static_format="png")
-        data.set_author(name=f"{statusemoji} {name}", url=avatar)
-        data.set_thumbnail(url=avatar)
-
-        await ctx.send(embed=data)
-
-    @commands.command()
-    async def names(self, ctx: commands.Context, *, member: discord.Member):
-        """Show previous names and nicknames of a member."""
-        names, nicks = await self.get_names_and_nicks(member)
-        msg = ""
-        if names:
-            msg += _("**Past 20 names**:")
-            msg += "\n"
-            msg += ", ".join(names)
-        if nicks:
-            if msg:
-                msg += "\n\n"
-            msg += _("**Past 20 nicknames**:")
-            msg += "\n"
-            msg += ", ".join(nicks)
-        if msg:
-            msg = filter_various_mentions(msg)
-            await ctx.send(msg)
-        else:
-            await ctx.send(_("That member doesn't have any recorded name or nickname change."))
+                await ctx.send("Done.")

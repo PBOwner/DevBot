@@ -1,6 +1,4 @@
 from collections import namedtuple
-import pytest
-
 from redbot.pytest.mod import *
 
 

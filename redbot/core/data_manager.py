@@ -14,6 +14,8 @@ from . import commands
 from ._cli import ExitCodes
 
 __all__ = (
+    "create_temp_config",
+    "load_basic_configuration",
     "cog_data_path",
     "core_data_path",
     "bundled_data_path",
@@ -226,7 +228,6 @@ def bundled_data_path(cog_instance: commands.Cog) -> Path:
 
 def data_path() -> Path:
     """Gets the base data path.
-
     Returns
     -------
     str
@@ -237,7 +238,6 @@ def data_path() -> Path:
 
 def instance_name() -> str:
     """Gets instance's name.
-
     Returns
     -------
     str
@@ -248,7 +248,6 @@ def instance_name() -> str:
 
 def metadata_file() -> Path:
     """Gets the path of metadata file.
-
     Returns
     -------
     str

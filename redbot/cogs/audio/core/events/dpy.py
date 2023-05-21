@@ -88,21 +88,21 @@ DANGEROUS_COMMANDS = {
     ),
     "command_llset_unmanaged": _(
         "This command will disable the managed Lavalink node, "
-        "if you toggle this command you must specify an external Lavalink node to connect to, "
+        "if you toggle this command you must specify an unmanaged Lavalink node to connect to, "
         "if you do not do so Audio will stop working."
     ),
     "command_llset_host": _(
-        "This command is used to specify the IP which will be used by Red to connect to an external Lavalink node. "
+        "This command is used to specify the IP which will be used by Red to connect to an unmanaged Lavalink node. "
     ),
     "command_llset_password": _(
         "This command is used to specify the authentication password used by Red to connect to an "
-        "external Lavalink node."
+        "unmanaged Lavalink node."
     ),
     "command_llset_secured": _(
-        "This command is used toggle between secured and unsecured connections to an external Lavalink node."
+        "This command is used toggle between secured and unsecured connections to an unmanaged Lavalink node."
     ),
     "command_llset_wsport": _(
-        "This command is used to specify the connection port used by Red to connect to an external Lavalink node."
+        "This command is used to specify the connection port used by Red to connect to an unmanaged Lavalink node."
     ),
     "command_llset_config_host": _(
         "This command specifies which network interface and IP the managed Lavalink node will bind to, "

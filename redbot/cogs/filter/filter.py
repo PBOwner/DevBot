@@ -1,7 +1,6 @@
 import asyncio
 import discord
 import re
-from datetime import timezone
 from typing import Union, Set, Literal, Optional
 
 from redbot.core import Config, modlog, commands
@@ -98,7 +97,6 @@ class Filter(commands.Cog):
         - `[p]filterset defaultname Missingno`
 
         **Arguments:**
-
         - `<name>` The new nickname to assign.
         """
         guild = ctx.guild
@@ -119,7 +117,6 @@ class Filter(commands.Cog):
         - `[p]filterset ban 2 20` - Ban users who say 2 filtered words in 20 seconds.
 
         **Arguments:**
-
         - `<count>` The amount of filtered words required to trigger a ban.
         - `<timeframe>` The period of time in which too many filtered words will trigger a ban.
         """
@@ -268,7 +265,6 @@ class Filter(commands.Cog):
         - `[p]filter channel add #channel "This is a sentence"`
 
         **Arguments:**
-
         - `<channel>` The text, voice, stage, or forum channel to add filtered words to.
         - `[words...]` The words or sentences to filter.
         """
@@ -297,7 +293,6 @@ class Filter(commands.Cog):
         - `[p]filter channel remove #channel "This is a sentence"`
 
         **Arguments:**
-
         - `<channel>` The text, voice, stage, or forum channel to add filtered words to.
         - `[words...]` The words or sentences to no longer filter.
         """
@@ -319,7 +314,6 @@ class Filter(commands.Cog):
         - `[p]filter add "This is a sentence"`
 
         **Arguments:**
-
         - `[words...]` The words or sentences to filter.
         """
         server = ctx.guild
@@ -341,7 +335,6 @@ class Filter(commands.Cog):
         - `[p]filter remove "This is a sentence"`
 
         **Arguments:**
-
         - `[words...]` The words or sentences to no longer filter.
         """
         server = ctx.guild

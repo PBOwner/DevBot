@@ -1,4 +1,5 @@
 from __future__ import annotations
+import aiohttp
 import asyncio
 import inspect
 import logging
@@ -8,10 +9,10 @@ import shutil
 import sys
 import contextlib
 import weakref
-import functools
 from collections import namedtuple, OrderedDict
 from datetime import datetime
 from importlib.machinery import ModuleSpec
+from importlib.util import module_from_spec
 from pathlib import Path
 from typing import (
     Optional,
@@ -37,7 +38,7 @@ import discord
 from discord.ext import commands as dpy_commands
 from discord.ext.commands import when_mentioned_or
 
-from . import Config, i18n, app_commands, commands, errors, _drivers, modlog, bank
+from . import Config, app_commands, bank, commands, _drivers, errors, i18n, modlog
 from ._cli import ExitCodes
 from ._cog_manager import CogManager, CogManagerUI
 from .core_commands import Core
@@ -52,11 +53,11 @@ from ._settings_caches import (
     DisabledCogCache,
     I18nManager,
 )
-from .utils.predicates import MessagePredicate
 from ._rpc import RPCMixin
 from .tree import RedTree
 from .utils import can_user_send_messages_in, common_filters, AsyncIter
 from .utils.chat_formatting import box, text_to_file
+from .utils.predicates import MessagePredicate
 from .utils._internal_utils import send_to_owners_with_prefix_replaced
 
 if TYPE_CHECKING:
@@ -80,8 +81,6 @@ DataDeletionResults = namedtuple("DataDeletionResults", "failed_modules failed_c
 PreInvokeCoroutine = Callable[[commands.Context], Awaitable[Any]]
 T_BIC = TypeVar("T_BIC", bound=PreInvokeCoroutine)
 UserOrRole = Union[int, discord.Role, discord.Member, discord.User]
-
-_ = i18n.Translator("Core", __file__)
 
 
 def _is_submodule(parent, child):
@@ -108,6 +107,7 @@ class Red(
         self.rpc_enabled = cli_flags.rpc
         self.rpc_port = cli_flags.rpc_port
         self._last_exception = None
+        self.session: aiohttp.ClientSession = None
         self._config.register_global(
             token=None,
             prefix=[],
@@ -132,7 +132,7 @@ class Red(
             help__tagline="",
             help__use_tick=False,
             help__react_timeout=30,
-            description="Red V3",
+            description="Kiki\✨ V2",
             invite_public=False,
             invite_perm=0,
             invite_commands_scope=False,
@@ -147,7 +147,7 @@ class Red(
             schema_version=0,
             datarequests__allow_user_requests=True,
             datarequests__user_requests_are_strict=True,
-            use_buttons=False,
+            use_buttons=True,
             enabled_slash_commands={},
             enabled_user_commands={},
             enabled_message_commands={},
@@ -192,7 +192,7 @@ class Red(
         self._ignored_cache = IgnoreManager(self._config)
         self._whiteblacklist_cache = WhitelistBlacklistManager(self._config)
         self._i18n_cache = I18nManager(self._config)
-        self._bypass_cooldowns = False
+        self._bypass_cooldowns = True
 
         async def prefix_manager(bot, message) -> List[str]:
             prefixes = await self._prefix_cache.get_prefixes(message.guild)
@@ -1052,6 +1052,7 @@ class Red(
         discord.Member
             The user you requested.
         """
+
         if (member := guild.get_member(member_id)) is not None:
             return member
         return await guild.fetch_member(member_id)
@@ -1127,6 +1128,7 @@ class Red(
         """
         await super()._pre_login()
 
+        self.session = aiohttp.ClientSession()
         await self._maybe_update_config()
         self.description = await self._config.description()
         self._color = discord.Colour(await self._config.color())
@@ -1429,10 +1431,8 @@ class Red(
         str
             Invite URL.
         """
-        data = await self._config.all()
-        commands_scope = data["invite_commands_scope"]
-        scopes = ("bot", "applications.commands") if commands_scope else ("bot",)
-        perms_int = data["invite_perm"]
+        scopes = ("bot", "applications.commands")
+        perms_int = await self._config.invite_perm()
         permissions = discord.Permissions(perms_int)
         return discord.utils.oauth_url(self.application_id, permissions=permissions, scopes=scopes)
 
@@ -1677,15 +1677,23 @@ class Red(
         if name in self.extensions:
             raise errors.PackageAlreadyLoaded(spec)
 
-        lib = spec.loader.load_module()
+        lib = module_from_spec(spec)
+        sys.modules[name] = lib
+        try:
+            spec.loader.exec_module(lib)
+        except Exception:
+            del sys.modules[name]
+            raise
+
         if not hasattr(lib, "setup"):
             del lib
-            raise discord.ClientException(f"extension {name} does not have a setup function")
+            raise discord.ClientException(f"Extension {name} does not have a setup function.")
 
         try:
             await lib.setup(self)
             await self.tree.red_check_enabled()
-        except Exception as e:
+        except Exception:
+            del sys.modules[name]
             await self._remove_module_references(lib.__name__)
             await self._call_module_finalizers(lib, name)
             raise
@@ -1729,9 +1737,7 @@ class Red(
     ) -> None:
         """
         Mark an application command as being enabled.
-
         Enabled commands are able to be added to the bot's tree, are able to be synced, and can be invoked.
-
         Raises
         ------
         CommandLimitReached
@@ -1761,7 +1767,6 @@ class Red(
     ) -> None:
         """
         Mark an application command as being disabled.
-
         Disabled commands are not added to the bot's tree, are not able to be synced, and cannot be invoked.
         """
         if command_type is discord.AppCommandType.chat_input:
@@ -2086,7 +2091,7 @@ class Red(
         Union[discord.TextChannel, discord.VoiceChannel, discord.StageChannel, discord.User]
     ]:
         """
-        Gets the users and channels to send to
+        Gets the users and channels to send to.
         """
         await self.wait_until_red_ready()
         destinations = []
@@ -2170,6 +2175,7 @@ class Red(
     async def close(self):
         """Logs out of Discord and closes all connections."""
         await super().close()
+        await self.session.close()
         await _drivers.get_driver_class().teardown()
         try:
             if self.rpc_enabled:
@@ -2373,12 +2379,12 @@ class Red(
             n_remaining = len(messages) - idx
             if n_remaining > 0:
                 if n_remaining == 1:
-                    prompt_text = _(
+                    prompt_text = (
                         "There is still one message remaining. Type {command_1} to continue"
                         " or {command_2} to upload all contents as a file."
                     )
                 else:
-                    prompt_text = _(
+                    prompt_text = (
                         "There are still {count} messages remaining. Type {command_1} to continue"
                         " or {command_2} to upload all contents as a file."
                     )
@@ -2413,3 +2419,7 @@ class Red(
                         )
                         break
         return ret
+
+    async def get_support_server_url(self):
+        """Get the support server URL for this bot."""
+        return await self._config.support_server()

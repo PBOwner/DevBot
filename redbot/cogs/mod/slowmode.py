@@ -1,5 +1,4 @@
 import discord
-import re
 from .abc import MixinMeta
 from datetime import timedelta
 from redbot.core import commands, i18n

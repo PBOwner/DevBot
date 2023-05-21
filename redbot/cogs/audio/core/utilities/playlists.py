@@ -329,7 +329,7 @@ class PlaylistUtilities(MixinMeta, metaclass=CompositeMetaClass):
         uploaded_playlist_url: str,
         track_list: List,
         author: Union[discord.User, discord.Member],
-        guild: Union[discord.Guild],
+        guild: discord.Guild,
     ) -> None:
         embed1 = discord.Embed(title=_("Please wait, adding tracks..."))
         playlist_msg = await self.send_embed_msg(ctx, embed=embed1)
@@ -403,7 +403,7 @@ class PlaylistUtilities(MixinMeta, metaclass=CompositeMetaClass):
         uploaded_playlist_name: str,
         scope: str,
         author: Union[discord.User, discord.Member],
-        guild: Union[discord.Guild],
+        guild: discord.Guild,
     ):
         track_list = []
         successful_count = 0

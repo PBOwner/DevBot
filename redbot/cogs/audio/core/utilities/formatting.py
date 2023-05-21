@@ -395,15 +395,18 @@ class FormattingUtilities(MixinMeta, metaclass=CompositeMetaClass):
         dur = getattr(player.current, "length", player.position or 1)
         sections = 12
         loc_time = round((pos / dur if dur != 0 else pos) * sections)
-        bar = "\N{BOX DRAWINGS HEAVY HORIZONTAL}"
-        seek = "\N{RADIO BUTTON}"
+        filled_bar = self.bot.get_emoji(980801854667640852)
+        half_bar = self.bot.get_emoji(980801895448854548)
+        empty_bar = self.bot.get_emoji(980801932245471292)
         if paused:
-            msg = "\N{DOUBLE VERTICAL BAR}\N{VARIATION SELECTOR-16}"
+            msg = "\N{DOUBLE VERTICAL BAR}\N{VARIATION SELECTOR-16} "
         else:
-            msg = "\N{BLACK RIGHT-POINTING TRIANGLE}\N{VARIATION SELECTOR-16}"
+            msg = "\N{BLACK RIGHT-POINTING TRIANGLE}\N{VARIATION SELECTOR-16} "
         for i in range(sections):
-            if i == loc_time:
-                msg += seek
+            if i < loc_time:
+                msg += str(filled_bar)
+            elif i > loc_time:
+                msg += str(empty_bar)
             else:
-                msg += bar
-        return msg
+                msg += str(half_bar)
+        return msg + " "

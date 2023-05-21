@@ -538,7 +538,7 @@ class MixinMeta(ABC):
         uploaded_playlist_url: str,
         track_list: List,
         author: Union[discord.User, discord.Member],
-        guild: Union[discord.Guild],
+        guild: discord.Guild,
     ) -> None:
         raise NotImplementedError()
 
@@ -552,7 +552,7 @@ class MixinMeta(ABC):
         uploaded_playlist_name: str,
         scope: str,
         author: Union[discord.User, discord.Member],
-        guild: Union[discord.Guild],
+        guild: discord.Guild,
     ):
         raise NotImplementedError()
 
@@ -573,7 +573,7 @@ class MixinMeta(ABC):
         raise NotImplementedError()
 
     @abstractmethod
-    async def command_prev(self, ctx: commands.Context):
+    async def command_previous(self, ctx: commands.Context):
         raise NotImplementedError()
 
     @abstractmethod

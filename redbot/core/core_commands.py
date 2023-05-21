@@ -1,5 +1,6 @@
 import asyncio
 import contextlib
+import copy
 import datetime
 import importlib
 import itertools
@@ -8,38 +9,24 @@ import logging
 import io
 import random
 import markdown
-import os
 import re
 import sys
-import platform
-import psutil
-import getpass
-import pip
+import time
 import traceback
-from pathlib import Path
 from collections import defaultdict
-from redbot.core import app_commands, data_manager
+from rapidfuzz import process, utils
+from pathlib import Path
 from redbot.core.utils.menus import menu
-from redbot.core.utils.views import SetApiView
+from redbot.core.utils.views import _StopButton, InviteView, SetApiView, View
+from redbot.core import app_commands, commands
 from redbot.core.commands import GuildConverter, RawUserIdConverter
 from string import ascii_letters, digits
-from typing import (
-    TYPE_CHECKING,
-    Union,
-    Tuple,
-    List,
-    Optional,
-    Iterable,
-    Sequence,
-    Dict,
-    Set,
-    Literal,
-)
+from tabulate import tabulate
+from typing import TYPE_CHECKING, Union, List, Optional, Iterable, Sequence, Dict, Literal
 
 import aiohttp
 import discord
 from babel import Locale as BabelLocale, UnknownLocaleError
-from redbot.core.data_manager import storage_type
 
 from . import (
     __version__,
@@ -52,21 +39,21 @@ from . import (
 )
 from ._diagnoser import IssueDiagnoser
 from .utils import AsyncIter, can_user_send_messages_in
-from .utils._internal_utils import fetch_latest_red_version_info
 from .utils.predicates import MessagePredicate
 from .utils.chat_formatting import (
+    bold,
     box,
-    escape,
     humanize_list,
     humanize_number,
     humanize_timedelta,
     inline,
     pagify,
-    warning,
+    text_to_file,
+    underline,
 )
+from .utils.views import ConfirmationView, ContactDmView
 from .commands import CommandConverter, CogConverter
 from .commands.requires import PrivilegeLevel
-from .commands.help import HelpMenuSetting
 
 _entities = {
     "*": "&midast;",
@@ -397,155 +384,231 @@ class Core(commands.commands._RuleDropper, commands.Cog, CoreLogic):
         """Nothing to delete (Core Config is handled in a bot method)"""
         return
 
-    @commands.command(hidden=True)
-    async def ping(self, ctx: commands.Context):
-        """Pong."""
-        await ctx.send("Pong.")
+    # Thanks Fixator
+    @commands.hybrid_command(aliases=["oing", "ling", "ipng", "pnig", "pign", "pinf", "ipgn"])
+    @commands.max_concurrency(1, commands.BucketType.guild)
+    async def ping(self, ctx: commands.Context, show_shards: bool = False):
+        """Shows my ping/latency.
 
-    @commands.command()
-    async def info(self, ctx: commands.Context):
+        This data can't be considered an actual latency and as matter of fact, affected by many factors.
+
+        Discord WS: WebSocket latency. This is how fast bot will receive events from Discord.
+        Message: Difference between your command message and message with ping.
+        Typing: Time that bot taken to send message with ping.
+        """
+        show_shards = len(self.bot.latencies) > 1 and show_shards
+        pings = {"Discord WS": round(self.bot.latency * 1000, 2)}
+        if await ctx.embed_requested():
+            embed = discord.Embed(title="Pinging...", color=discord.Color.red())
+            for name, value in pings.items():
+                embed.add_field(name=name, value=box(f"{value} ms", "py"))
+            if ctx.invoked_with != "ping":
+                embed.set_footer(text="\N{SMIRKING FACE} Nice typo!")  # Inspired by Vexed :p
+            before = time.monotonic()
+            message = await ctx.send(embed=embed)
+            embed.clear_fields()
+            embed.title = "<a:Kiki:922371688635707412> Pong!"
+            embed.color = await ctx.embed_color()
+            pings["Message"] = round(
+                (
+                    message.created_at - (ctx.message.edited_at or ctx.message.created_at)
+                ).total_seconds()
+                * 1000,
+                2,
+            )
+            pings["Typing"] = round((time.monotonic() - before) * 1000, 2)
+            for name, value in pings.items():
+                embed.add_field(name=name, value=box(f"{value} ms", "py"))
+            if show_shards:
+                embed.add_field(
+                    name="Shards",
+                    value=box(
+                        "\n".join(
+                            [
+                                "Shard {}/{}: {} ms".format(
+                                    shard + 1, self.bot.shard_count, round(ping * 1000)
+                                )
+                                for shard, ping in self.bot.latencies
+                            ]
+                        ),
+                        "python",
+                    ),
+                )
+            await message.edit(embed=embed)
+        else:
+            table = tabulate(pings.items())
+            if show_shards:
+                shards = tabulate(
+                    [
+                        (
+                            "Shard {}/{}".format(shard + 1, self.bot.shard_count),
+                            f"{round(ping * 1000, 2)} ms",
+                        )
+                        for shard, ping in self.bot.latencies
+                    ]
+                )
+                table += f"\n{shards}"
+            typo = "\N{SMIRKING FACE} Nice typo!" if ctx.invoked_with != "ping" else ""
+            before = time.monotonic()
+            message = await ctx.send(typo + box(table, "py"))
+            pings["Message"] = round(
+                (
+                    message.created_at - (ctx.message.edited_at or ctx.message.created_at)
+                ).total_seconds()
+                * 1000,
+                2,
+            )
+            pings["Typing"] = round((time.monotonic() - before) * 1000, 2)
+            for key, value in pings.items():
+                pings[key] = f"{value} ms"
+            table = tabulate(pings.items())
+            if show_shards:
+                table += f"\n{shards}"
+            await message.edit(content=typo + box(table, "py"))
+
+    @commands.command(aliases=["info"])
+    @commands.bot_has_permissions(embed_links=True)
+    async def botinfo(self, ctx: commands.Context):
         """Shows info about [botname]."""
-        embed_links = await ctx.embed_requested()
-        author_repo = "https://github.com/Twentysix26"
+        embed = discord.Embed(color=await ctx.embed_color())
+        # app_info = await self.bot.application_info()
+        # embed.add_field(
+        #     name="Instance Owned by Team:" if app_info.team else "Instance Owned by:",
+        #     value=app_info.team if app_info.team else str(owner),
+        # )
+
+        python = sys.version_info[:3]  # This will return a tuple of (major, minor, micro)
+        python_url = "https://www.python.org/downloads/release/python-{}{}{}".format(*python)
+        dpy_repo = "https://github.com/Rapptz/discord.py"
+        red_repo = "https://github.com/Kiki-DiscordBot/Red-DiscordBot"
+        python_version = "[`{}.{}.{}`]({})".format(*python, python_url)
+        dpy_version = "[`{}`]({})".format(discord.__version__, dpy_repo)
+        red_version = "[`{}`]({})".format(__version__, red_repo)
+        dot = str(self.bot.get_emoji(914352680627994634))
+        embed.add_field(
+            name="<:Kiki:920617449127309322> Versions",
+            value=(
+                f"<:Python:917079498636279868> {python_version}{dot}"
+                f"<:discordpy:917079482148458557> {dpy_version}{dot}"
+                f"<:Red:917079459641831474> {red_version}"
+            ),
+        )
+
+        custom_info = await self.bot._config.custom_info()
+        if custom_info:
+            embed.add_field(
+                name="<:Kiki:920617449127309322> About Kiki\✨", value=custom_info, inline=False
+            )
+
         red_repo = "https://github.com/Cog-Creators/Red-DiscordBot"
         contributors_url = red_repo + "/graphs/contributors"
-        red_pypi = "https://pypi.org/project/Red-DiscordBot"
-        support_server_url = "https://discord.gg/red"
-        dpy_repo = "https://github.com/Rapptz/discord.py"
-        python_url = "https://www.python.org/"
-        since = datetime.datetime(2016, 1, 2, 0, 0)
+        author_repo = "https://github.com/Twentysix26"
+        red_server = "https://discord.gg/red"
+        about = (
+            "Kiki\✨ is a custom fork of [Red, an open source Discord Bot]({}) "
+            "created by [Twentysix]({}) and [improved by many]({}).\n\n"
+            "Red is backed by a passionate community who contributes and creates content for everyone to enjoy.\n"
+            "[Join us today]({}) and help us improve!\n\n(c) Cog Creators"
+        ).format(red_repo, author_repo, contributors_url, red_server)
+        embed.add_field(name="<:Red:917079459641831474> About Red", value=about, inline=False)
+
+        bot_invite = (
+            await self.bot.get_invite_url() if await self.bot.is_invite_url_public() else None
+        )
+        server_invite = await self.bot.get_support_server_url()
+        links = ""
+        if bot_invite:
+            links += "[Invite Kiki\✨]({})".format(bot_invite)
+        if bot_invite and server_invite:
+            links += " | "
+        if server_invite:
+            links += "[Support Server]({})".format(server_invite)
+        if links != "":
+            embed.add_field(name="<:Link:955273752940261376> Links", value=links, inline=False)
+
+        embed.set_image(url="https://i.ibb.co/Gt73SGQ/kiki.jpg")
+
+        since = datetime.datetime(2021, 9, 12, 9, 44)  # 12 Sep 2021, 09:44
         days_since = (datetime.datetime.utcnow() - since).days
+        embed.set_footer(
+            text="Bringing Joy since 12th September 2021 (over {} days ago!)".format(days_since),
+            icon_url="https://i.ibb.co/DDFddpF/kiki.png",
+        )
+        view = InviteView(self.bot)
+        await view.start(ctx, embed=embed)
 
-        app_info = await self.bot.application_info()
-        if app_info.team:
-            owner = app_info.team.name
-        else:
-            owner = app_info.owner
-        custom_info = await self.bot._config.custom_info()
+    @commands.command(cls=commands.commands._AlwaysAvailableCommand)
+    async def credits(self, ctx: commands.Context):
+        """Shows [botname]'s credits."""
+        org = "https://github.com/Cog-Creators"
+        red_repo = org + "/Red-DiscordBot"
+        twentysix = "https://github.com/Twentysix26"
+        red_server = "https://discord.gg/red"
+        kuro = self.bot.get_user(732425670856147075)
+        lamune = self.bot.get_user(214412567466999818)
 
-        pypi_version, py_version_req = await fetch_latest_red_version_info()
-        outdated = pypi_version and pypi_version > red_version_info
-
-        if embed_links:
-            dpy_version = "[{}]({})".format(discord.__version__, dpy_repo)
-            python_version = "[{}.{}.{}]({})".format(*sys.version_info[:3], python_url)
-            red_version = "[{}]({})".format(__version__, red_pypi)
-
-            about = _(
-                "This bot is an instance of [Red, an open source Discord bot]({}) "
+        embeds = []
+        embed = discord.Embed(
+            title=f"{self.bot.user.name}'s Credits",
+            description=f"Credits for all people and services that helps {self.bot.user.name} exist.",
+            timestamp=ctx.me.created_at,
+            color=await ctx.embed_color(),
+        )
+        embed.set_footer(
+            text="{} exists since".format(self.bot.user.name),
+            icon_url="https://cdn.discordapp.com/attachments/908719687397953606/921065568365322280/kiki_round.png",
+        )
+        embed.set_thumbnail(
+            url="https://cdn.discordapp.com/attachments/908719687397953606/921065568365322280/kiki_round.png"
+        )
+        embed.add_field(
+            name="<:Red:917079459641831474> Red - Discord Bot",
+            value=(
+                "Kiki\✨ is a custom fork of [Red, an open source Discord Bot]({}) "
                 "created by [Twentysix]({}) and [improved by many]({}).\n\n"
-                "Red is backed by a passionate community who contributes and "
-                "creates content for everyone to enjoy. [Join us today]({}) "
-                "and help us improve!\n\n"
-                "(c) Cog Creators"
-            ).format(red_repo, author_repo, contributors_url, support_server_url)
+                "Red is backed by a [passionate community]({}) who contributes "
+                "and creates content for everyone to enjoy.\n\n(c) Cog Creators"
+            ).format(red_repo, twentysix, org, red_server),
+            inline=False,
+        )
+        embed.add_field(
+            name="<:Kiki:920617449127309322> Hosting",
+            value=(
+                f"This instance is maintained by {str(kuro)} and hosted with help of {str(lamune)}.\n"
+                f"The host provider is Oracle."
+            ),
+            inline=False,
+        )
+        embeds.append(embed)
 
-            embed = discord.Embed(color=(await ctx.embed_colour()))
-            embed.add_field(
-                name=_("Instance owned by team") if app_info.team else _("Instance owned by"),
-                value=str(owner),
-            )
-            embed.add_field(name="Python", value=python_version)
-            embed.add_field(name="discord.py", value=dpy_version)
-            embed.add_field(name=_("Red version"), value=red_version)
-            if outdated in (True, None):
-                if outdated is True:
-                    outdated_value = _("Yes, {version} is available.").format(
-                        version=str(pypi_version)
+        if repo_cog := self.bot.get_cog("Downloader"):
+            repos = {c.repo_name for c in await repo_cog.installed_cogs()}
+            cogs_credits = (
+                f"*Use `{ctx.clean_prefix}findcog <command>` to find out who is author of certain command.*\n"
+                + "\n".join(
+                    sorted(
+                        (
+                            f"**[{repo.url.split('/')[4]}]({repo.url})**: {', '.join(repo.author) or repo.url.split('/')[3]}"
+                            for repo in repo_cog._repo_manager.repos
+                            if repo.url.startswith("http") and repo.name in repos
+                        ),
+                        key=lambda k: k.title(),
                     )
-                else:
-                    outdated_value = _("Checking for updates failed.")
-                embed.add_field(name=_("Outdated"), value=outdated_value)
-            if custom_info:
-                embed.add_field(name=_("About this instance"), value=custom_info, inline=False)
-            embed.add_field(name=_("About Red"), value=about, inline=False)
-
-            embed.set_footer(
-                text=_("Bringing joy since 02 Jan 2016 (over {} days ago!)").format(days_since)
-            )
-            await ctx.send(embed=embed)
-        else:
-            python_version = "{}.{}.{}".format(*sys.version_info[:3])
-            dpy_version = "{}".format(discord.__version__)
-            red_version = "{}".format(__version__)
-
-            about = _(
-                "This bot is an instance of Red, an open source Discord bot (1) "
-                "created by Twentysix (2) and improved by many (3).\n\n"
-                "Red is backed by a passionate community who contributes and "
-                "creates content for everyone to enjoy. Join us today (4) "
-                "and help us improve!\n\n"
-                "(c) Cog Creators"
-            )
-            about = box(about)
-
-            if app_info.team:
-                extras = _(
-                    "Instance owned by team: [{owner}]\n"
-                    "Python:                 [{python_version}] (5)\n"
-                    "discord.py:             [{dpy_version}] (6)\n"
-                    "Red version:            [{red_version}] (7)\n"
-                ).format(
-                    owner=owner,
-                    python_version=python_version,
-                    dpy_version=dpy_version,
-                    red_version=red_version,
                 )
-            else:
-                extras = _(
-                    "Instance owned by: [{owner}]\n"
-                    "Python:            [{python_version}] (5)\n"
-                    "discord.py:        [{dpy_version}] (6)\n"
-                    "Red version:       [{red_version}] (7)\n"
-                ).format(
-                    owner=owner,
-                    python_version=python_version,
-                    dpy_version=dpy_version,
-                    red_version=red_version,
+            )
+            for value in pagify(cogs_credits, page_length=1024):
+                # Embed.copy() or copy.copy() will make all embeds link
+                # So if you edit fields on an embed, all embed fields will be the same
+                # To prevent it, we should use deepcopy.
+                repos_embed = copy.deepcopy(embed)
+                repos_embed.clear_fields()
+                repos_embed.add_field(
+                    name="<:Cog:925401264395796481> Cogs & Their Creators",
+                    value=value,
+                    inline=False,
                 )
-
-            if outdated in (True, None):
-                if outdated is True:
-                    outdated_value = _("Yes, {version} is available.").format(
-                        version=str(pypi_version)
-                    )
-                else:
-                    outdated_value = _("Checking for updates failed.")
-                extras += _("Outdated:          [{state}]\n").format(state=outdated_value)
-
-            red = (
-                _("**About Red**\n")
-                + about
-                + "\n"
-                + box(extras, lang="ini")
-                + "\n"
-                + _("Bringing joy since 02 Jan 2016 (over {} days ago!)").format(days_since)
-                + "\n\n"
-            )
-
-            await ctx.send(red)
-            if custom_info:
-                custom_info = _("**About this instance**\n") + custom_info + "\n\n"
-                await ctx.send(custom_info)
-            refs = _(
-                "**References**\n"
-                "1. <{}>\n"
-                "2. <{}>\n"
-                "3. <{}>\n"
-                "4. <{}>\n"
-                "5. <{}>\n"
-                "6. <{}>\n"
-                "7. <{}>\n"
-            ).format(
-                red_repo,
-                author_repo,
-                contributors_url,
-                support_server_url,
-                python_url,
-                dpy_repo,
-                red_pypi,
-            )
-            await ctx.send(refs)
+                embeds.append(repos_embed)
+        await menu(ctx, embeds)
 
     @commands.command()
     async def uptime(self, ctx: commands.Context):
@@ -553,11 +616,9 @@ class Core(commands.commands._RuleDropper, commands.Cog, CoreLogic):
         delta = datetime.datetime.utcnow() - self.bot.uptime
         uptime = self.bot.uptime.replace(tzinfo=datetime.timezone.utc)
         uptime_str = humanize_timedelta(timedelta=delta) or _("Less than one second.")
-        await ctx.send(
-            _("I have been up for: **{time_quantity}** (since {timestamp})").format(
-                time_quantity=uptime_str, timestamp=discord.utils.format_dt(uptime, "f")
-            )
-        )
+        embed = discord.Embed(title="Kiki\✨ has been up for:", color=await ctx.embed_color())
+        embed.description = f"{uptime_str}\nSince: <t:{int(uptime.timestamp())}:F>"
+        await ctx.send(embed=embed)
 
     @commands.group(cls=commands.commands._AlwaysAvailableGroup)
     async def mydata(self, ctx: commands.Context):
@@ -1117,18 +1178,17 @@ class Core(commands.commands._RuleDropper, commands.Cog, CoreLogic):
         The default is to use embeds.
 
         The embed settings are checked until the first True/False in this order:
-
         - In guild context:
-          1. Channel override - `[p]embedset channel`
-          2. Server command override - `[p]embedset command server`
-          3. Server override - `[p]embedset server`
-          4. Global command override - `[p]embedset command global`
-          5. Global setting  -`[p]embedset global`
+            1. Channel override - `[p]embedset channel`
+            2. Server command override - `[p]embedset command server`
+            3. Server override - `[p]embedset server`
+            4. Global command override - `[p]embedset command global`
+            5. Global setting  -`[p]embedset global`
 
         - In DM context:
-          1. User override - `[p]embedset user`
-          2. Global command override - `[p]embedset command global`
-          3. Global setting - `[p]embedset global`
+            1. User override - `[p]embedset user`
+            2. Global command override - `[p]embedset command global`
+            3. Global setting - `[p]embedset global`
         """
 
     @embedset.command(name="showsettings")
@@ -1203,40 +1263,7 @@ class Core(commands.commands._RuleDropper, commands.Cog, CoreLogic):
             await self.bot._config.embeds.clear()
             await ctx.send(_("Embeds are now enabled by default."))
 
-    @embedset.command(name="server", aliases=["guild"])
-    @commands.guildowner_or_permissions(administrator=True)
-    @commands.guild_only()
-    async def embedset_guild(self, ctx: commands.Context, enabled: bool = None):
-        """
-        Set the server's embed setting.
-
-        If set, this is used instead of the global default to determine whether or not to use embeds.
-        This is used for all commands done in a server.
-
-        If enabled is left blank, the setting will be unset and the global default will be used instead.
-
-        To see full evaluation order of embed settings, run `[p]help embedset`.
-
-        **Examples:**
-        - `[p]embedset server False` - Disables embeds on this server.
-        - `[p]embedset server` - Resets value to use global default.
-
-        **Arguments:**
-        - `[enabled]` - Whether to use embeds on this server. Leave blank to reset to default.
-        """
-        if enabled is None:
-            await self.bot._config.guild(ctx.guild).embeds.clear()
-            await ctx.send(_("Embeds will now fall back to the global setting."))
-            return
-
-        await self.bot._config.guild(ctx.guild).embeds.set(enabled)
-        await ctx.send(
-            _("Embeds are now enabled for this guild.")
-            if enabled
-            else _("Embeds are now disabled for this guild.")
-        )
-
-    @commands.guildowner_or_permissions(administrator=True)
+    @commands.is_owner()
     @embedset.group(name="command", invoke_without_command=True)
     async def embedset_command(
         self, ctx: commands.Context, command: CommandConverter, enabled: bool = None
@@ -1260,10 +1287,7 @@ class Core(commands.commands._RuleDropper, commands.Cog, CoreLogic):
         - `[enabled]` - Whether to use embeds for this command. Leave blank to reset to default.
         """
         # Select the scope based on the author's privileges
-        if await ctx.bot.is_owner(ctx.author):
-            await self.embedset_command_global(ctx, command, enabled)
-        else:
-            await self.embedset_command_guild(ctx, command, enabled)
+        await self.embedset_command_global(ctx, command, enabled)
 
     def _check_if_command_requires_embed_links(self, command_obj: commands.Command) -> None:
         for command in itertools.chain((command_obj,), command_obj.parents):
@@ -1276,234 +1300,68 @@ class Core(commands.commands._RuleDropper, commands.Cog, CoreLogic):
                     )
                 )
 
+    @commands.command(aliases=["tb"])
     @commands.is_owner()
-    @embedset_command.command(name="global")
-    async def embedset_command_global(
-        self, ctx: commands.Context, command: CommandConverter, enabled: bool = None
-    ):
-        """
-        Sets a command's embed setting globally.
-
-        If set, this is used instead of the global default to determine whether or not to use embeds.
-
-        If enabled is left blank, the setting will be unset.
-
-        To see full evaluation order of embed settings, run `[p]help embedset`.
-
-        **Examples:**
-        - `[p]embedset command global info` - Clears command specific embed settings for 'info'.
-        - `[p]embedset command global info False` - Disables embeds for 'info'.
-        - `[p]embedset command global "ignore list" True` - Quotes are needed for subcommands.
-
-        **Arguments:**
-        - `[enabled]` - Whether to use embeds for this command. Leave blank to reset to default.
-        """
-        self._check_if_command_requires_embed_links(command)
-        # qualified name might be different if alias was passed to this command
-        command_name = command.qualified_name
-
-        if enabled is None:
-            await self.bot._config.custom("COMMAND", command_name, 0).embeds.clear()
-            await ctx.send(_("Embeds will now fall back to the global setting."))
+    async def traceback(self, ctx: commands.Context):
+        """Sends the last command exception that has occurred."""
+        exception = self.bot._last_exception
+        if not exception:
+            await ctx.send(_("No exception has occurred yet."))
             return
 
-        await self.bot._config.custom("COMMAND", command_name, 0).embeds.set(enabled)
-        if enabled:
-            await ctx.send(
-                _("Embeds are now enabled for {command_name} command.").format(
-                    command_name=inline(command_name)
-                )
-            )
+        view = View()
+        view.add_item(_StopButton())
+
+        if len(exception) > 1990:  # Limit is 2000 (- 10 for py code blocks)
+            await view.start(ctx, file=text_to_file(exception, filename="exception.py"))
         else:
-            await ctx.send(
-                _("Embeds are now disabled for {command_name} command.").format(
-                    command_name=inline(command_name)
-                )
-            )
+            await view.start(ctx, box(exception, lang="py"))
 
-    @commands.guild_only()
-    @embedset_command.command(name="server", aliases=["guild"])
-    async def embedset_command_guild(
-        self, ctx: commands.GuildContext, command: CommandConverter, enabled: bool = None
-    ):
-        """
-        Sets a command's embed setting for the current server.
-
-        If set, this is used instead of the server default to determine whether or not to use embeds.
-
-        If enabled is left blank, the setting will be unset and the server default will be used instead.
-
-        To see full evaluation order of embed settings, run `[p]help embedset`.
-
-        **Examples:**
-        - `[p]embedset command server info` - Clears command specific embed settings for 'info'.
-        - `[p]embedset command server info False` - Disables embeds for 'info'.
-        - `[p]embedset command server "ignore list" True` - Quotes are needed for subcommands.
-
-        **Arguments:**
-        - `[enabled]` - Whether to use embeds for this command. Leave blank to reset to default.
-        """
-        self._check_if_command_requires_embed_links(command)
-        # qualified name might be different if alias was passed to this command
-        command_name = command.qualified_name
-
-        if enabled is None:
-            await self.bot._config.custom("COMMAND", command_name, ctx.guild.id).embeds.clear()
-            await ctx.send(_("Embeds will now fall back to the server setting."))
-            return
-
-        await self.bot._config.custom("COMMAND", command_name, ctx.guild.id).embeds.set(enabled)
-        if enabled:
-            await ctx.send(
-                _("Embeds are now enabled for {command_name} command.").format(
-                    command_name=inline(command_name)
-                )
-            )
-        else:
-            await ctx.send(
-                _("Embeds are now disabled for {command_name} command.").format(
-                    command_name=inline(command_name)
-                )
-            )
-
-    @embedset.command(name="channel")
-    @commands.guildowner_or_permissions(administrator=True)
-    @commands.guild_only()
-    async def embedset_channel(
-        self,
-        ctx: commands.Context,
-        channel: Union[
-            discord.TextChannel, discord.VoiceChannel, discord.StageChannel, discord.ForumChannel
-        ],
-        enabled: bool = None,
-    ):
-        """
-        Set's a channel's embed setting.
-
-        If set, this is used instead of the guild and command defaults to determine whether or not to use embeds.
-        This is used for all commands done in a channel.
-
-        If enabled is left blank, the setting will be unset and the guild default will be used instead.
-
-        To see full evaluation order of embed settings, run `[p]help embedset`.
-
-        **Examples:**
-        - `[p]embedset channel #text-channel False` - Disables embeds in the #text-channel.
-        - `[p]embedset channel #forum-channel disable` - Disables embeds in the #forum-channel.
-        - `[p]embedset channel #text-channel` - Resets value to use guild default in the #text-channel.
-
-        **Arguments:**
-            - `<channel>` - The text, voice, stage, or forum channel to set embed setting for.
-            - `[enabled]` - Whether to use embeds in this channel. Leave blank to reset to default.
-        """
-        if enabled is None:
-            await self.bot._config.channel(channel).embeds.clear()
-            await ctx.send(_("Embeds will now fall back to the global setting."))
-            return
-
-        await self.bot._config.channel(channel).embeds.set(enabled)
-        await ctx.send(
-            _("Embeds are now {} for this channel.").format(
-                _("enabled") if enabled else _("disabled")
-            )
-        )
-
-    @embedset.command(name="user")
-    async def embedset_user(self, ctx: commands.Context, enabled: bool = None):
-        """
-        Sets personal embed setting for DMs.
-
-        If set, this is used instead of the global default to determine whether or not to use embeds.
-        This is used for all commands executed in a DM with the bot.
-
-        If enabled is left blank, the setting will be unset and the global default will be used instead.
-
-        To see full evaluation order of embed settings, run `[p]help embedset`.
-
-        **Examples:**
-        - `[p]embedset user False` - Disables embeds in your DMs.
-        - `[p]embedset user` - Resets value to use global default.
-
-        **Arguments:**
-        - `[enabled]` - Whether to use embeds in your DMs. Leave blank to reset to default.
-        """
-        if enabled is None:
-            await self.bot._config.user(ctx.author).embeds.clear()
-            await ctx.send(_("Embeds will now fall back to the global setting."))
-            return
-
-        await self.bot._config.user(ctx.author).embeds.set(enabled)
-        await ctx.send(
-            _("Embeds are now enabled for you in DMs.")
-            if enabled
-            else _("Embeds are now disabled for you in DMs.")
-        )
-
-    @commands.command()
-    @commands.is_owner()
-    async def traceback(self, ctx: commands.Context, public: bool = False):
-        """Sends to the owner the last command exception that has occurred.
-
-        If public (yes is specified), it will be sent to the chat instead.
-
-        Warning: Sending the traceback publicly can accidentally reveal sensitive information about your computer or configuration.
-
-        **Examples:**
-        - `[p]traceback` - Sends the traceback to your DMs.
-        - `[p]traceback True` - Sends the last traceback in the current context.
-
-        **Arguments:**
-        - `[public]` - Whether to send the traceback to the current context. Leave blank to send to your DMs.
-        """
-        channel = ctx.channel if public else ctx.author
-
-        if self.bot._last_exception:
-            try:
-                await self.bot.send_interactive(
-                    channel,
-                    pagify(self.bot._last_exception, shorten_by=10),
-                    user=ctx.author,
-                    box_lang="py",
-                )
-            except discord.HTTPException:
-                await ctx.channel.send(
-                    "I couldn't send the traceback message to you in DM. "
-                    "Either you blocked me or you disabled DMs in this server."
+    @commands.hybrid_command()
+    @commands.check(CoreLogic._can_get_invite_url)
+    async def invite(self, ctx: commands.Context):
+        """Shows my invite url and requirements."""
+        bot = self.bot
+        title = _("Thanks for Inviting {}").format(bot.user.name)
+        bot_invite = await bot.get_invite_url()
+        server_invite = await bot.get_support_server_url()
+        reqs = []
+        if gm := bot.get_cog("GuildManager"):
+            config = await gm.config.all()
+            if config["serverlocked"]:
+                await ctx.send(
+                    "I'm currently serverlocked, I can't join any server for now.", ephemeral=True
                 )
                 return
-            if not public:
-                await ctx.tick()
-        else:
-            await ctx.send(_("No exception has occurred yet."))
+            min_members, bot_ratio = config["min_members"], round(config["bot_ratio"] * 100)
+            if min_members:
+                reqs.append(f"Your server needs at least __{min_members} Members__")
+            if bot_ratio:
+                reqs.append(f"__{bot_ratio}%__ of your Members must be __Humans__.")
 
-    @commands.command()
-    @commands.check(CoreLogic._can_get_invite_url)
-    async def invite(self, ctx):
-        """Shows [botname]'s invite url.
+        view = InviteView(self.bot)
+        if not await ctx.embed_requested():
+            messages = [
+                bold(title),
+                f"Bot Invite: {bot_invite}",
+                f"Support Server: {server_invite}",
+            ]
+            if reqs:
+                messages.append(f"Requirements: {humanize_list(reqs)}")
+            await view.start(ctx, "\n".join(messages), ephemeral=True)
+            return
 
-        This will always send the invite to DMs to keep it private.
-
-        This command is locked to the owner unless `[p]inviteset public` is set to True.
-
-        **Example:**
-        - `[p]invite`
-        """
-        message = await self.bot.get_invite_url()
-        if (admin := self.bot.get_cog("Admin")) and await admin.config.serverlocked():
-            message += "\n\n" + warning(
-                _(
-                    "This bot is currently **serverlocked**, meaning that it is locked "
-                    "to its current servers and will leave any server it joins."
-                )
+        embed = discord.Embed(title=title, color=await ctx.embed_color())
+        embed.set_thumbnail(url=bot.user.avatar.with_format("png").url)
+        embed.add_field(name="Bot Invite", value=f"[Click Here!]({bot_invite})")
+        embed.add_field(name="Support Server", value=f"[Click Here!]({server_invite})")
+        if reqs:
+            o = str(bot.get_emoji(914352680627994634))
+            value = [o + r for r in reqs]
+            embed.add_field(
+                name=underline("Requirement") + ":", value="\n".join(value), inline=False
             )
-        try:
-            await ctx.author.send(message)
-            await ctx.tick()
-        except discord.errors.Forbidden:
-            await ctx.send(
-                "I couldn't send the invite message to you in DM. "
-                "Either you blocked me or you disabled DMs in this server."
-            )
+        await view.start(ctx, embed=embed, ephemeral=True)
 
     @commands.group()
     @commands.is_owner()
@@ -1512,22 +1370,15 @@ class Core(commands.commands._RuleDropper, commands.Cog, CoreLogic):
         pass
 
     @inviteset.command()
-    async def public(self, ctx, confirm: bool = False):
+    async def public(self, ctx: commands.Context):
         """
         Toggles if `[p]invite` should be accessible for the average user.
 
         The bot must be made into a `Public bot` in the developer dashboard for public invites to work.
 
         **Example:**
-        - `[p]inviteset public yes` - Toggles the public invite setting.
-
-        **Arguments:**
-        - `[confirm]` - Required to set to public. Not required to toggle back to private.
+        - `[p]inviteset public` - Toggles the public invite setting.
         """
-        if await self.bot._config.invite_public():
-            await self.bot._config.invite_public.set(False)
-            await ctx.send("The invite is now private.")
-            return
         app_info = await self.bot.application_info()
         if not app_info.bot_public:
             await ctx.send(
@@ -1538,15 +1389,12 @@ class Core(commands.commands._RuleDropper, commands.Cog, CoreLogic):
                 "https://discord.com/developers/applications/{0}/bot".format(self.bot.user.id)
             )
             return
-        if not confirm:
-            await ctx.send(
-                "You're about to make the `{0}invite` command public. "
-                "All users will be able to invite me on their server.\n\n"
-                "If you agree, you can type `{0}inviteset public yes`.".format(ctx.clean_prefix)
-            )
-        else:
-            await self.bot._config.invite_public.set(True)
-            await ctx.send("The invite command is now public.")
+
+        toggle = not await self.bot._config.invite_public()
+        await self.bot._config.invite_public.set(toggle)
+        if not toggle:
+            return await ctx.send("The invite is now private.")
+        await ctx.send("The invite command is now public.")
 
     @inviteset.command()
     async def perms(self, ctx, level: int):
@@ -1570,24 +1418,19 @@ class Core(commands.commands._RuleDropper, commands.Cog, CoreLogic):
         await ctx.send("The new permissions level has been set.")
 
     @inviteset.command()
-    async def commandscope(self, ctx: commands.Context):
+    async def support(self, ctx: commands.Context, *, url: str):
         """
-        Add the `applications.commands` scope to your invite URL.
+        Set the support server invite for the bot.
 
-        This allows the usage of slash commands on the servers that invited your bot with that scope.
+        **Example:**
+        - `[p]inviteset support https://discord.gg/kiki` - Sets the support server url to https://discord.gg/kiki.
 
-        Note that previous servers that invited the bot without the scope cannot have slash commands, they will have to invite the bot a second time.
+        **Arguments:**
+        - `<support_server>` - The invite URL to the support server.
         """
-        enabled = not await self.bot._config.invite_commands_scope()
-        await self.bot._config.invite_commands_scope.set(enabled)
-        if enabled is True:
-            await ctx.send(
-                _("The `applications.commands` scope has been added to the invite URL.")
-            )
-        else:
-            await ctx.send(
-                _("The `applications.commands` scope has been removed from the invite URL.")
-            )
+        url = url.strip("<>")
+        await self.bot._config.support_server.set(url)
+        await ctx.send(_("The support server has been set."))
 
     @commands.command()
     @commands.is_owner()
@@ -1692,6 +1535,44 @@ class Core(commands.commands._RuleDropper, commands.Cog, CoreLogic):
             await ctx.send(pages[0])
         else:
             await menu(ctx, pages)
+
+    # Stolen from Jack's unapproved cogs repo (https://github.com/jack1142/WeirdUnsupportedCogsOfJack)
+    @commands.command(aliases=["cmdsearch", "searchcommands"])
+    async def commandsearch(self, ctx: commands.Context, *, query: str):
+        """Commands will never be able to hide from you again!"""
+        commands = [
+            {
+                "name": c.qualified_name,
+                "help": c.format_help_for_context(ctx),
+            }
+            for c in set(self.bot.walk_commands())
+            if await c.can_run(ctx)
+        ]
+        name_matches = process.extract(
+            {"name": query},
+            commands,
+            processor=lambda c: utils.default_process(c["name"]),
+            limit=50,
+            score_cutoff=75,
+        )
+        help_matches = process.extract(
+            {"help": query},
+            commands,
+            processor=lambda c: utils.default_process(c["help"]),
+            limit=50,
+            score_cutoff=75,
+        )
+        best_matches = sorted(name_matches + help_matches, key=lambda m: m[1], reverse=True)
+
+        embeds: List[discord.Embed] = []
+        for index, match in enumerate(best_matches, 1):
+            command = match[0]
+            embed = discord.Embed(
+                title=command["name"], description=command["help"], color=await ctx.embed_color()
+            )
+            embed.set_footer(text=f"Page {index}/{len(best_matches)}")
+            embeds.append(embed)
+        await menu(ctx, embeds)
 
     @commands.command(require_var_positional=True)
     @commands.is_owner()
@@ -1974,8 +1855,8 @@ class Core(commands.commands._RuleDropper, commands.Cog, CoreLogic):
         This command does NOT sync the enabled commands with Discord, that must be done manually with `[p]slash sync` for commands to appear in users' clients.
 
         **Arguments:**
-            - `<command_name>` - The command name to enable. Only the top level name of a group command should be used.
-            - `[command_type]` - What type of application command to enable. Must be one of `slash`, `message`, or `user`. Defaults to `slash`.
+        - `<command_name>` - The command name to enable. Only the top level name of a group command should be used.
+        - `[command_type]` - What type of application command to enable. Must be one of `slash`, `message`, or `user`. Defaults to `slash`.
         """
         command_type = command_type.lower().strip()
 
@@ -2039,8 +1920,8 @@ class Core(commands.commands._RuleDropper, commands.Cog, CoreLogic):
         This command does NOT sync the enabled commands with Discord, that must be done manually with `[p]slash sync` for commands to appear in users' clients.
 
         **Arguments:**
-            - `<command_name>` - The command name to disable. Only the top level name of a group command should be used.
-            - `[command_type]` - What type of application command to disable. Must be one of `slash`, `message`, or `user`. Defaults to `slash`.
+        - `<command_name>` - The command name to disable. Only the top level name of a group command should be used.
+        - `[command_type]` - What type of application command to disable. Must be one of `slash`, `message`, or `user`. Defaults to `slash`.
         """
         command_type = command_type.lower().strip()
 
@@ -2069,7 +1950,7 @@ class Core(commands.commands._RuleDropper, commands.Cog, CoreLogic):
         current_settings = current_settings[command_type]
 
         if command_name not in current_settings:
-            await ctx.send(_("That application command is already disabled or does not exist."))
+            await ctx.send(_("That application command is already disabled or doesn't exist."))
             return
 
         await self.bot.disable_app_command(command_name, raw_type)
@@ -2090,7 +1971,7 @@ class Core(commands.commands._RuleDropper, commands.Cog, CoreLogic):
         This command does NOT sync the enabled commands with Discord, that must be done manually with `[p]slash sync` for commands to appear in users' clients.
 
         **Arguments:**
-            - `<cog_name>` - The cog to enable commands from. This argument is case sensitive.
+        - `<cog_name>` - The cog to enable commands from. This argument is case sensitive.
         """
         enabled_commands = await self.bot.list_enabled_app_commands()
         to_add_slash = []
@@ -2186,7 +2067,7 @@ class Core(commands.commands._RuleDropper, commands.Cog, CoreLogic):
         This command does NOT sync the enabled commands with Discord, that must be done manually with `[p]slash sync` for commands to appear in users' clients.
 
         **Arguments:**
-            - `<cog_name>` - The cog to disable commands from. This argument is case sensitive.
+        - `<cog_name>` - The cog to disable commands from. This argument is case sensitive.
         """
         removed = []
         for name, com in self.bot.tree._global_commands.items():
@@ -2342,7 +2223,7 @@ class Core(commands.commands._RuleDropper, commands.Cog, CoreLogic):
         This should be run sparingly, make all necessary changes before running this command.
 
         **Arguments:**
-            - `[guild]` - If provided, syncs commands for that guild. Otherwise, syncs global commands.
+        - `[guild]` - If provided, syncs commands for that guild. Otherwise, syncs global commands.
         """
         # This command should not be automated due to the restrictive rate limits associated with it.
         if ctx.assume_yes:
@@ -2383,9 +2264,9 @@ class Core(commands.commands._RuleDropper, commands.Cog, CoreLogic):
             )
         )
 
-    @commands.command(name="shutdown")
+    @commands.command(name="shutdown", aliases=["die"])
     @commands.is_owner()
-    async def _shutdown(self, ctx: commands.Context, silently: bool = False):
+    async def _shutdown(self, ctx: commands.Context, directly: bool = False):
         """Shuts down the bot.
 
         Allows [botname] to shut down gracefully.
@@ -2394,21 +2275,34 @@ class Core(commands.commands._RuleDropper, commands.Cog, CoreLogic):
 
         **Examples:**
         - `[p]shutdown`
-        - `[p]shutdown True` - Shutdowns silently.
+        - `[p]shutdown True` - Shutdowns directly.
 
         **Arguments:**
-        - `[silently]` - Whether to skip sending the shutdown message. Defaults to False.
+        - `[directly]` - Whether to shutdown directly without confirmation. Defaults to False.
         """
-        wave = "\N{WAVING HAND SIGN}"
-        skin = "\N{EMOJI MODIFIER FITZPATRICK TYPE-3}"
         with contextlib.suppress(discord.HTTPException):
-            if not silently:
-                await ctx.send(_("Shutting down... ") + wave + skin)
-        await ctx.bot.shutdown()
+            if directly:
+                embed = discord.Embed(title="Shutting Down...", color=await ctx.embed_color())
+                await ctx.send(embed=embed)
+                await self.bot.shutdown()
+            else:
+                embed = discord.Embed(
+                    title="Are you sure you want to shut down?", color=await ctx.embed_color()
+                )
+                view = ConfirmationView()
+                await view.start(ctx, embed=embed)
+                await view.wait()
+                if view.value:
+                    embed = discord.Embed(title="Shutting Down...", color=await ctx.embed_color())
+                    await view.message.edit(embed=embed)
+                    await self.bot.shutdown()
+                else:
+                    embed = discord.Embed(title="Cancelling...", color=await ctx.embed_color())
+                    await view.message.edit(embed=embed)
 
     @commands.command(name="restart")
     @commands.is_owner()
-    async def _restart(self, ctx: commands.Context, silently: bool = False):
+    async def _restart(self, ctx: commands.Context, directly: bool = False):
         """Attempts to restart [botname].
 
         Makes [botname] quit with exit code 26.
@@ -2416,15 +2310,30 @@ class Core(commands.commands._RuleDropper, commands.Cog, CoreLogic):
 
         **Examples:**
         - `[p]restart`
-        - `[p]restart True` - Restarts silently.
+        - `[p]restart True` - Restarts directly.
 
         **Arguments:**
-        - `[silently]` - Whether to skip sending the restart message. Defaults to False.
+        - `[directly]` - Whether to restart directly without confirmation. Defaults to False.
         """
         with contextlib.suppress(discord.HTTPException):
-            if not silently:
-                await ctx.send(_("Restarting..."))
-        await ctx.bot.shutdown(restart=True)
+            if directly:
+                embed = discord.Embed(title="Restarting...", color=await ctx.embed_color())
+                await ctx.send(embed=embed)
+                await self.bot.shutdown(restart=True)
+            else:
+                embed = discord.Embed(
+                    title="Are you sure you want to restart?", color=await ctx.embed_color()
+                )
+                view = ConfirmationView()
+                await view.start(ctx, embed=embed)
+                await view.wait()
+                if view.value:
+                    embed = discord.Embed(title="Restarting...", color=await ctx.embed_color())
+                    await view.message.edit(embed=embed)
+                    await self.bot.shutdown(restart=True)
+                else:
+                    embed = discord.Embed(title="Cancelling...", color=await ctx.embed_color())
+                    await view.message.edit(embed=embed)
 
     @bank.is_owner_if_bank_global()
     @commands.guildowner_or_permissions(administrator=True)
@@ -2495,10 +2404,10 @@ class Core(commands.commands._RuleDropper, commands.Cog, CoreLogic):
     @bank.is_owner_if_bank_global()
     @commands.guildowner_or_permissions(administrator=True)
     @bankset.command(name="creditsname")
-    async def bankset_creditsname(self, ctx: commands.Context, *, name: str):
+    async def bankset_creditsname(self, ctx: commands.Context, *, name: Union[discord.Emoji, str]):
         """Set the name for the bank's currency."""
-        await bank.set_currency_name(name, ctx.guild)
-        await ctx.send(_("Currency name has been set to: {name}").format(name=name))
+        await bank.set_currency_name(str(name), ctx.guild)
+        await ctx.send(_("Currency name has been set to: {name}").format(name=str(name)))
 
     @bank.is_owner_if_bank_global()
     @commands.guildowner_or_permissions(administrator=True)
@@ -3010,7 +2919,7 @@ class Core(commands.commands._RuleDropper, commands.Cog, CoreLogic):
         if len(text) <= 1024:
             await ctx.bot._config.custom_info.set(text)
             await ctx.send(_("The custom text has been set."))
-            await ctx.invoke(self.info)
+            await ctx.invoke(self.botinfo)
         else:
             await ctx.send(_("Text must be fewer than 1024 characters long."))
 
@@ -3253,12 +3162,12 @@ class Core(commands.commands._RuleDropper, commands.Cog, CoreLogic):
         Adds an admin role for this server.
 
         Admins have the same access as Mods, plus additional admin level commands like:
-         - `[p]set serverprefix`
-         - `[p]addrole`
-         - `[p]ban`
-         - `[p]ignore guild`
+        - `[p]set serverprefix`
+        - `[p]addrole`
+        - `[p]ban`
+        - `[p]ignore guild`
 
-         And more.
+        And more.
 
         **Examples:**
         - `[p]set roles addadminrole @Admins`
@@ -3281,11 +3190,11 @@ class Core(commands.commands._RuleDropper, commands.Cog, CoreLogic):
         Adds a moderator role for this server.
 
         This grants access to moderator level commands like:
-         - `[p]mute`
-         - `[p]cleanup`
-         - `[p]customcommand create`
+        - `[p]mute`
+        - `[p]cleanup`
+        - `[p]customcommand create`
 
-         And more.
+        And more.
 
         **Examples:**
         - `[p]set roles addmodrole @Mods`
@@ -3800,25 +3709,23 @@ class Core(commands.commands._RuleDropper, commands.Cog, CoreLogic):
     # -- End Set Ownernotifications Commands -- ###
 
     @_set.command(name="showsettings")
-    async def _set_showsettings(self, ctx: commands.Context, server: discord.Guild = None):
+    async def _set_showsettings(
+        self, ctx: commands.Context, server: discord.Guild = commands.CurrentGuild
+    ):
         """
         Show the current settings for [botname].
 
         Accepts optional server parameter to allow prefix recovery.
         """
-        if server is None:
-            server = ctx.guild
-
         if server:
             guild_data = await ctx.bot._config.guild(server).all()
-            guild = server
             admin_role_ids = guild_data["admin_role"]
-            admin_role_names = [r.name for r in guild.roles if r.id in admin_role_ids]
+            admin_role_names = [r.name for r in server.roles if r.id in admin_role_ids]
             admin_roles_str = (
                 humanize_list(admin_role_names) if admin_role_names else _("Not Set.")
             )
             mod_role_ids = guild_data["mod_role"]
-            mod_role_names = [r.name for r in guild.roles if r.id in mod_role_ids]
+            mod_role_names = [r.name for r in server.roles if r.id in mod_role_ids]
             mod_roles_str = humanize_list(mod_role_names) if mod_role_names else _("Not Set.")
 
             guild_locale = await i18n.get_locale_from_guild(self.bot, server)
@@ -3848,7 +3755,7 @@ class Core(commands.commands._RuleDropper, commands.Cog, CoreLogic):
 
         prefix_string = " ".join(prefixes)
         settings = _(
-            "{bot_name} Settings:\n\n"
+            "{bot_name} Settings for {guild_name}:\n\n"
             "Prefixes: {prefixes}\n"
             "{guild_settings}"
             "Global locale: {locale}\n"
@@ -3856,6 +3763,7 @@ class Core(commands.commands._RuleDropper, commands.Cog, CoreLogic):
             "Default embed colour: {colour}"
         ).format(
             bot_name=ctx.bot.user.name,
+            guild_name=server.name,
             prefixes=prefix_string,
             guild_settings=guild_settings,
             locale=locale,
@@ -4054,7 +3962,7 @@ class Core(commands.commands._RuleDropper, commands.Cog, CoreLogic):
     @_set.command(name="serverprefix", aliases=["serverprefixes"])
     @commands.admin_or_permissions(manage_guild=True)
     async def _set_serverprefix(
-        self, ctx: commands.Context, server: Optional[discord.Guild], *prefixes: str
+        self, ctx: commands.Context, server: discord.Guild = commands.CurrentGuild, *prefixes: str
     ):
         """
         Sets [botname]'s server prefix(es).
@@ -4074,9 +3982,6 @@ class Core(commands.commands._RuleDropper, commands.Cog, CoreLogic):
         - `[server]` - The server to set the prefix for. Defaults to current server.
         - `[prefixes...]` - The prefixes the bot will respond to on this server. Leave blank to clear server prefixes.
         """
-        if server is None:
-            server = ctx.guild
-
         if not prefixes:
             await ctx.bot.set_prefixes(guild=server, prefixes=[])
             await ctx.send(_("Server prefixes have been reset."))
@@ -4098,58 +4003,29 @@ class Core(commands.commands._RuleDropper, commands.Cog, CoreLogic):
 
     @_set.command(name="usebuttons")
     @commands.is_owner()
-    async def _set_usebuttons(self, ctx: commands.Context, use_buttons: bool = None):
+    async def use_buttons(self, ctx: commands.Context, use_buttons: bool = None):
         """
         Set a global bot variable for using buttons in menus.
 
         When enabled, all usage of cores menus API will use buttons instead of reactions.
 
-        This defaults to False.
+        This defaults to True.
         Using this without a setting will toggle.
 
         **Examples:**
-            - `[p]set usebuttons True` - Enables using buttons.
-            - `[p]helpset usebuttons` - Toggles the value.
+        - `[p]set usebuttons` - Toggles the value.
+        - `[p]set usebuttons True` - Enables using buttons.
 
         **Arguments:**
-            - `[use_buttons]` - Whether to use buttons. Leave blank to toggle.
+        - `[use_buttons]` - Whether to use buttons. Leave blank to toggle.
         """
         if use_buttons is None:
             use_buttons = not await ctx.bot._config.use_buttons()
-        await ctx.bot._config.use_buttons.set(use_buttons)
+        await ctx.bot._config.help.use_menus.set(use_buttons)
         if use_buttons:
             await ctx.send(_("I will use buttons on basic menus."))
         else:
             await ctx.send(_("I will not use buttons on basic menus."))
-
-    @_set.command(name="errormsg")
-    @commands.is_owner()
-    async def _set_errormsg(self, ctx: commands.Context, *, msg: str = None):
-        """
-        Set the message that will be sent on uncaught bot errors.
-
-        To include the command name in the message, use the `{command}` placeholder.
-
-        If you omit the `msg` argument, the message will be reset to the default one.
-
-        **Examples:**
-            - `[p]set errormsg` - Resets the error message back to the default: "Error in command '{command}'.". If the command invoker is one of the bot owners, the message will also include "Check your console or logs for details.".
-            - `[p]set errormsg Oops, the command {command} has failed! Please try again later.` - Sets the error message to a custom one.
-
-        **Arguments:**
-            - `[msg]` - The custom error message. Must be less than 1000 characters. Omit to reset to the default one.
-        """
-        if msg is not None and len(msg) >= 1000:
-            return await ctx.send(_("The message must be less than 1000 characters."))
-
-        if msg is not None:
-            await self.bot._config.invoke_error_msg.set(msg)
-            content = _("Successfully updated the error message.")
-        else:
-            await self.bot._config.invoke_error_msg.clear()
-            content = _("Successfully reset the error message back to the default one.")
-
-        await ctx.send(content)
 
     @commands.group()
     @commands.is_owner()
@@ -4228,14 +4104,13 @@ class Core(commands.commands._RuleDropper, commands.Cog, CoreLogic):
         use_menus: Literal["buttons", "reactions", "select", "selectonly", "disable"],
     ):
         """
-        Allows the help command to be sent as a paginated menu instead of separate
-        messages.
+        Allows the help command to be sent as a paginated menu instead of separate messages.
 
         When "reactions", "buttons", "select", or "selectonly" is passed,
          `[p]help` will only show one page at a time
         and will use the associated control scheme to navigate between pages.
 
-         **Examples:**
+        **Examples:**
         - `[p]helpset usemenus reactions` - Enables using reaction menus.
         - `[p]helpset usemenus buttons` - Enables using button menus.
         - `[p]helpset usemenus select` - Enables buttons with a select menu.
@@ -4243,7 +4118,7 @@ class Core(commands.commands._RuleDropper, commands.Cog, CoreLogic):
         - `[p]helpset usemenus disable` - Disables help menus.
 
         **Arguments:**
-            - `<"buttons"|"reactions"|"select"|"selectonly"|"disable">` - Whether to use `buttons`,
+        - `<"buttons"|"reactions"|"select"|"selectonly"|"disable">` - Whether to use `buttons`,
             `reactions`, `select`, `selectonly`, or no menus.
         """
         if use_menus == "selectonly":
@@ -4258,7 +4133,7 @@ class Core(commands.commands._RuleDropper, commands.Cog, CoreLogic):
         if use_menus == "reactions":
             msg = _("Help will use reaction menus.")
             await ctx.bot._config.help.use_menus.set(1)
-        if use_menus == "disable":
+        if use_menus == "disabled":
             msg = _("Help will not use menus.")
             await ctx.bot._config.help.use_menus.set(0)
 
@@ -4533,146 +4408,84 @@ class Core(commands.commands._RuleDropper, commands.Cog, CoreLogic):
         await ctx.bot._config.help.tagline.set(tagline)
         await ctx.send(_("The tagline has been set."))
 
-    @commands.command(cooldown_after_parsing=True)
-    @commands.cooldown(1, 60, commands.BucketType.user)
+    @commands.hybrid_command()
+    @app_commands.describe(message="The message to send to the owners.")
     async def contact(self, ctx: commands.Context, *, message: str):
-        """Sends a message to the owner.
-
-        This is limited to one message every 60 seconds per person.
+        """
+        Sends a message to the owners.
 
         **Example:**
-        - `[p]contact Help! The bot has become sentient!`
+        - `[p]contact Unblock me pls :(`
 
         **Arguments:**
-        - `[message]` - The message to send to the owner.
+        - `<message>` - The message to send to the owners.
         """
-        guild = ctx.message.guild
-        author = ctx.message.author
-        footer = _("User ID: {}").format(author.id)
-
-        if ctx.guild is None:
-            source = _("through DM")
-        else:
-            source = _("from {}").format(guild)
-            footer += _(" | Server ID: {}").format(guild.id)
-
-        prefixes = await ctx.bot.get_valid_prefixes()
-        prefix = re.sub(rf"<@!?{ctx.me.id}>", f"@{ctx.me.name}".replace("\\", r"\\"), prefixes[0])
-
-        content = _("Use `{}dm {} <text>` to reply to this user").format(prefix, author.id)
-
-        description = _("Sent by {} {}").format(author, source)
-
         destinations = await ctx.bot.get_owner_notification_destinations()
-
         if not destinations:
-            await ctx.send(_("I've been configured not to send this anywhere."))
+            await ctx.send("I've been configured not to send this anywhere.", ephemeral=True)
             return
 
-        successful = False
+        guild = ctx.guild
+        author = ctx.author
+        footer = f"User ID: {author.id}" + (f" | Server ID: {guild.id}" if guild else "")
+        source = f"from {guild.name}" if guild else "through DM"
+        description = "Sent by {} {}".format(author, source)
 
+        successful = []
+
+        view = ContactDmView(self.dm, author)
         for destination in destinations:
             is_dm = isinstance(destination, discord.User)
             if not is_dm and not destination.permissions_for(destination.guild.me).send_messages:
                 continue
 
-            if await ctx.bot.embed_requested(destination, command=ctx.command):
-                color = await ctx.bot.get_embed_color(destination)
+            color = await ctx.bot.get_embed_color(destination)
+            e = discord.Embed(color=color, description=message)
+            e.set_author(name=description, icon_url=author.display_avatar.url)
+            e.set_footer(text=f"{footer}\nYou can reply to this message with the button below.")
 
-                e = discord.Embed(colour=color, description=message)
-                e.set_author(name=description, icon_url=author.display_avatar)
-                e.set_footer(text=f"{footer}\n{content}")
-
-                try:
-                    await destination.send(embed=e)
-                except discord.Forbidden:
-                    log.exception(f"Contact failed to {destination}({destination.id})")
-                    # Should this automatically opt them out?
-                except discord.HTTPException:
-                    log.exception(
-                        f"An unexpected error happened while attempting to"
-                        f" send contact to {destination}({destination.id})"
-                    )
-                else:
-                    successful = True
+            try:
+                await destination.send(embed=e, view=view)
+            except (discord.Forbidden, discord.HTTPException):
+                successful.append(False)
             else:
-                msg_text = "{}\nMessage:\n\n{}\n{}".format(description, message, footer)
+                successful.append(True)
 
-                try:
-                    await destination.send("{}\n{}".format(content, box(msg_text)))
-                except discord.Forbidden:
-                    log.exception(f"Contact failed to {destination}({destination.id})")
-                    # Should this automatically opt them out?
-                except discord.HTTPException:
-                    log.exception(
-                        f"An unexpected error happened while attempting to"
-                        f" send contact to {destination}({destination.id})"
-                    )
-                else:
-                    successful = True
-
-        if successful:
-            await ctx.send(_("Your message has been sent."))
-        else:
-            await ctx.send(_("I'm unable to deliver your message. Sorry."))
+        if True in successful:
+            await ctx.send("Your message has been sent.", ephemeral=True)
+            return
+        await ctx.send("Sorry, I'm unable to send your message.", ephemeral=True)
 
     @commands.command()
     @commands.is_owner()
-    async def dm(self, ctx: commands.Context, user_id: int, *, message: str):
+    async def dm(self, ctx: commands.Context, user: discord.User, *, message: str):
         """Sends a DM to a user.
 
-        This command needs a user ID to work.
-
-        To get a user ID, go to Discord's settings and open the 'Appearance' tab.
-        Enable 'Developer Mode', then right click a user and click on 'Copy ID'.
-
         **Example:**
-        - `[p]dm 262626262626262626 Do you like me? Yes / No`
+        - `[p]dm 732425670856147075 I love you <3`
 
         **Arguments:**
-        - `[message]` - The message to dm to the user.
+        - `<message>` - The message to dm to the user.
         """
-        destination = self.bot.get_user(user_id)
-        if destination is None or destination.bot:
-            await ctx.send(
-                _(
-                    "Invalid ID, user not found, or user is a bot. "
-                    "You can only send messages to people I share "
-                    "a server with."
-                )
-            )
+        if user.bot:
+            await ctx.send("I can't send messages to bots.")
             return
 
-        prefixes = await ctx.bot.get_valid_prefixes()
-        prefix = re.sub(rf"<@!?{ctx.me.id}>", f"@{ctx.me.name}".replace("\\", r"\\"), prefixes[0])
-        description = _("Owner of {}").format(ctx.bot.user)
-        content = _("You can reply to this message with {}contact").format(prefix)
-        if await ctx.embed_requested():
-            e = discord.Embed(colour=await ctx.embed_colour(), description=message)
-
-            e.set_footer(text=content)
-            e.set_author(name=description, icon_url=ctx.bot.user.display_avatar)
-
-            try:
-                await destination.send(embed=e)
-            except discord.HTTPException:
-                await ctx.send(
-                    _("Sorry, I couldn't deliver your message to {}").format(destination)
-                )
-            else:
-                await ctx.send(_("Message delivered to {}").format(destination))
+        description = f"{ctx.author} (Owner of {ctx.me.name})"
+        ctx.message.delete()
+        color = await ctx.bot.get_embed_color(user)
+        view = ContactDmView(self.contact, ctx.author)
+        e = discord.Embed(color=color, description=message)
+        e.set_footer(text="You can reply to this message with the button below.")
+        e.set_author(name=description, icon_url=ctx.author.display_avatar.url)
+        try:
+            await user.send(embed=e, view=view)
+        except discord.HTTPException:
+            await ctx.send("Sorry, I couldn't deliver your message to {}".format(user))
         else:
-            response = "{}\nMessage:\n\n{}".format(description, message)
-            try:
-                await destination.send("{}\n{}".format(box(response), content))
-            except discord.HTTPException:
-                await ctx.send(
-                    _("Sorry, I couldn't deliver your message to {}").format(destination)
-                )
-            else:
-                await ctx.send(_("Message delivered to {}").format(destination))
+            await ctx.send("Your message has been sent to {}.".format(user))
 
-    @commands.command(hidden=True)
+    @commands.command()
     @commands.is_owner()
     async def datapath(self, ctx: commands.Context):
         """Prints the bot's data path."""
@@ -4682,7 +4495,7 @@ class Core(commands.commands._RuleDropper, commands.Cog, CoreLogic):
         msg = _("Data path: {path}").format(path=data_dir)
         await ctx.send(box(msg))
 
-    @commands.command(hidden=True)
+    @commands.command()
     @commands.is_owner()
     async def debuginfo(self, ctx: commands.Context):
         """Shows debug information useful for debugging."""
@@ -4703,8 +4516,7 @@ class Core(commands.commands._RuleDropper, commands.Cog, CoreLogic):
         channel: Optional[
             Union[discord.TextChannel, discord.VoiceChannel, discord.StageChannel, discord.Thread]
         ] = commands.CurrentChannel,
-        # avoid non-default argument following default argument by using empty param()
-        member: Union[discord.Member, discord.User] = commands.param(),
+        member: Union[discord.Member, discord.User] = commands.parameter(),
         *,
         command_name: str,
     ) -> None:
@@ -5689,13 +5501,15 @@ class Core(commands.commands._RuleDropper, commands.Cog, CoreLogic):
     async def ignore_channel(
         self,
         ctx: commands.Context,
-        channel: Union[
-            discord.TextChannel,
-            discord.VoiceChannel,
-            discord.StageChannel,
-            discord.ForumChannel,
-            discord.CategoryChannel,
-            discord.Thread,
+        channel: Optional[
+            Union[
+                discord.TextChannel,
+                discord.VoiceChannel,
+                discord.StageChannel,
+                discord.ForumChannel,
+                discord.CategoryChannel,
+                discord.Thread,
+            ]
         ] = commands.CurrentChannel,
     ):
         """
@@ -5748,13 +5562,15 @@ class Core(commands.commands._RuleDropper, commands.Cog, CoreLogic):
     async def unignore_channel(
         self,
         ctx: commands.Context,
-        channel: Union[
-            discord.TextChannel,
-            discord.VoiceChannel,
-            discord.StageChannel,
-            discord.ForumChannel,
-            discord.CategoryChannel,
-            discord.Thread,
+        channel: Optional[
+            Union[
+                discord.TextChannel,
+                discord.VoiceChannel,
+                discord.StageChannel,
+                discord.ForumChannel,
+                discord.CategoryChannel,
+                discord.Thread,
+            ]
         ] = commands.CurrentChannel,
     ):
         """

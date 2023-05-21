@@ -142,7 +142,7 @@ class Audio(
             repeat=False,
             shuffle=False,
             shuffle_bumped=True,
-            thumbnail=False,
+            thumbnail=True,
             volume=100,
             vote_enabled=False,
             vote_percent=0,

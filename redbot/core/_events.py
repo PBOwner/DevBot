@@ -1,6 +1,7 @@
 import asyncio
 import contextlib
 import platform
+import random
 import sys
 import logging
 import traceback
@@ -12,12 +13,12 @@ import discord
 import importlib.metadata
 from packaging.requirements import Requirement
 from redbot.core import data_manager
-
 from redbot.core.commands import RedHelpFormatter, HelpSettings
 from redbot.core.i18n import (
     Translator,
     set_contextual_locales_from_guild,
 )
+
 from .. import __version__ as red_version, version_info as red_version_info
 from . import commands
 from .config import get_latest_confs
@@ -28,7 +29,7 @@ from .utils._internal_utils import (
     fetch_latest_red_version_info,
     send_to_owners_with_prefix_replaced,
 )
-from .utils.chat_formatting import inline, format_perms_list
+from .utils.chat_formatting import box as code, error as cross, format_perms_list
 
 import rich
 from rich import box
@@ -40,12 +41,11 @@ from rich.text import Text
 log = logging.getLogger("red")
 
 INTRO = r"""
-______         _           ______ _                       _  ______       _
-| ___ \       | |          |  _  (_)                     | | | ___ \     | |
-| |_/ /___  __| |  ______  | | | |_ ___  ___ ___  _ __ __| | | |_/ / ___ | |_
-|    // _ \/ _` | |______| | | | | / __|/ __/ _ \| '__/ _` | | ___ \/ _ \| __|
-| |\ \  __/ (_| |          | |/ /| \__ \ (_| (_) | | | (_| | | |_/ / (_) | |_
-\_| \_\___|\__,_|          |___/ |_|___/\___\___/|_|  \__,_| \____/ \___/ \__|
+ _  __ _  _     _           ____   _                              _   ____          _   
+| |/ /(_)| | __(_)         |  _ \ (_) ___   ___   ___   _ __   __| | | __ )   ___  | |_ 
+| ' / | || |/ /| |  _____  | | | || |/ __| / __| / _ \ | '__| / _` | |  _ \  / _ \ | __|
+| . \ | ||   < | | |_____| | |_| || |\__ \| (__ | (_) || |   | (_| | | |_) || (_) || |_ 
+|_|\_\|_||_|\_\|_|         |____/ |_||___/ \___| \___/ |_|    \__,_| |____/  \___/  \__|
 """
 
 _ = Translator(__name__, __file__)
@@ -148,7 +148,7 @@ def init_events(bot, cli_flags):
         guilds = len(bot.guilds)
         users = len(set([m for m in bot.get_all_members()]))
 
-        invite_url = discord.utils.oauth_url(bot.application_id, scopes=("bot",))
+        invite_url = discord.utils.oauth_url(bot.application_id, scopes=("bot"))
 
         prefixes = cli_flags.prefix or (await bot._config.prefix())
         lang = await bot._config.locale()
@@ -179,7 +179,7 @@ def init_events(bot, cli_flags):
                 )
 
         rich_console = rich.get_console()
-        rich_console.print(INTRO, style="red", markup=False, highlight=False)
+        rich_console.print(INTRO, style="dark_slate_gray2", markup=False, highlight=False)
         if guilds:
             rich_console.print(
                 Columns(
@@ -214,28 +214,28 @@ def init_events(bot, cli_flags):
         await bot._delete_delay(ctx)
 
     @bot.event
-    async def on_command_error(ctx, error, unhandled_by_cog=False):
+    async def on_command_error(ctx: commands.Context, error, unhandled_by_cog=False):
         if not unhandled_by_cog:
             if hasattr(ctx.command, "on_error"):
                 return
-
-            if ctx.cog:
-                if ctx.cog.has_error_handler():
-                    return
+            if ctx.cog and ctx.cog.has_error_handler():
+                return
         if not isinstance(error, commands.CommandNotFound):
             asyncio.create_task(bot._delete_delay(ctx))
         converter = getattr(ctx.current_parameter, "converter", None)
         argument = ctx.current_argument
-
         if isinstance(error, commands.MissingRequiredArgument):
             await ctx.send_help()
         elif isinstance(error, commands.ArgParserFailure):
-            msg = _("`{user_input}` is not a valid value for `{command}`").format(
+            msg = cross(_("`{user_input}` is not a valid value for `{command}`")).format(
                 user_input=error.user_input, command=error.cmd
             )
             if error.custom_help_msg:
                 msg += f"\n{error.custom_help_msg}"
-            await ctx.send(msg)
+            try:
+                await ctx.reply(msg, mention_author=False)
+            except discord.HTTPException:
+                await ctx.send(msg)
             if error.send_cmd_help:
                 await ctx.send_help()
         elif isinstance(error, commands.RangeError):
@@ -359,27 +359,80 @@ def init_events(bot, cli_flags):
         elif isinstance(error, commands.DisabledCommand):
             disabled_message = await bot._config.disabled_command_msg()
             if disabled_message:
-                await ctx.send(disabled_message.replace("{command}", ctx.invoked_with))
+                disabled_message = disabled_message.replace("{command}", ctx.invoked_with)
+                try:
+                    await ctx.reply(disabled_message, mention_author=False)
+                except discord.HTTPException:
+                    await ctx.send(disabled_message)
         elif isinstance(error, commands.CommandInvokeError):
             log.exception(
                 "Exception in command '{}'".format(ctx.command.qualified_name),
                 exc_info=error.original,
             )
-            exception_log = "Exception in command '{}'\n" "".format(ctx.command.qualified_name)
+            exception_log = "Exception in command '{}'\n".format(ctx.command.qualified_name)
             exception_log += "".join(
                 traceback.format_exception(type(error), error, error.__traceback__)
             )
             bot._last_exception = exception_log
 
-            message = await bot._config.invoke_error_msg()
-            if not message:
-                if ctx.author.id in bot.owner_ids:
-                    message = inline(
-                        _("Error in command '{command}'. Check your console or logs for details.")
+            line = ("-" * 12) + ("-" * len(str(ctx.message.id)))
+            description = code(
+                (
+                    f"[{type(error).__name__}]\n{line}\n"
+                    f"[ID]      : {ctx.message.id}\n"
+                    f"[Cog]     : {ctx.cog.qualified_name if ctx.cog else 'None'}\n"
+                    f"[Command] : {ctx.command.qualified_name}\n"
+                    f"[Type]    : {error.original.__class__.__name__}\n"
+                    f"[Error]   : {error.original}\n"
+                ),
+                lang="prolog",
+            )
+            url = random.choice(
+                [
+                    "https://i.imgur.com/IZ512CN.gif",
+                    "https://i.gifer.com/embedded/download/T8kd.gif",
+                    "https://media.moddb.com/images/downloads/1/199/198436/MOSHED-2020-2-20-22-48-16.gif",
+                ]
+            )
+            support_server = "https://discord.gg/Zef3pD8Yt5"
+            embed = discord.Embed(color=discord.Color.red())
+            embed.set_image(url=url)
+            if await ctx.bot.is_owner(ctx.author):
+                embed.title = "Master... Your command returned an error!"
+                embed.description = description
+                embed.set_footer(
+                    text=f"Please use {ctx.prefix}traceback for the detailed cause of this error."
+                )
+                view = None
+            else:
+                embed.title = "Uh Oh... An Error Occured!"
+                embed.description = (
+                    "It looks like an error has occurred. This has been reported to my owner.\n"
+                    "You can consider joining [ʚ﹕The Cloud House﹕ɞ]({support_server}) , "
+                    "my support server to receive assistance or provide context."
+                ).format(support_server=support_server)
+                embed.add_field(name="Error Details", value=description)
+                embed.set_footer(
+                    text=(
+                        "Please refrain from using this command until this issue has been resolved.\n"
+                        "Spamming errored commands will result in a blacklist."
                     )
-                else:
-                    message = inline(_("Error in command '{command}'."))
-            await ctx.send(message.replace("{command}", ctx.command.qualified_name))
+                )
+                view = discord.ui.View()
+                server_invite = await bot.get_support_server_url()
+                if server_invite:
+                    view.add_item(
+                        discord.ui.Button(
+                            style=discord.ButtonStyle.link,
+                            label="Support Server",
+                            url=server_invite,
+                            emoji=ctx.bot.get_emoji(915569880160436264),
+                        )
+                    )
+            try:
+                await ctx.send(embed=embed, reference=ctx.message, mention_author=False, view=view)
+            except discord.HTTPException:
+                await ctx.send(embed=embed, view=view)
         elif isinstance(error, commands.CommandNotFound):
             help_settings = await HelpSettings.from_context(ctx)
             fuzzy_commands = await fuzzy_command_search(
@@ -395,74 +448,102 @@ def init_events(bot, cli_flags):
             else:
                 await ctx.send(await format_fuzzy_results(ctx, fuzzy_commands, embed=False))
         elif isinstance(error, commands.BotMissingPermissions):
-            if bin(error.missing.value).count("1") == 1:  # Only one perm missing
-                msg = _("I require the {permission} permission to execute that command.").format(
-                    permission=format_perms_list(error.missing)
-                )
+            embed = discord.Embed(title="Missing Permissions", color=discord.Color.red())
+            if bin(error.missing.value).count("1") == 1:  # Only missing a permission
+                embed.description = _(
+                    "I require the {permission} permission to run that command."
+                ).format(permission=format_perms_list(error.missing))
             else:
-                msg = _("I require {permission_list} permissions to execute that command.").format(
-                    permission_list=format_perms_list(error.missing)
-                )
-            await ctx.send(msg)
+                embed.description = _(
+                    "I require {permission_list} permissions to run that command."
+                ).format(permission_list=format_perms_list(error.missing))
+            try:
+                await ctx.reply(embed=embed, mention_author=False)
+            except discord.HTTPException:
+                await ctx.send(embed=embed)
         elif isinstance(error, commands.UserFeedbackCheckFailure):
             if error.message:
                 await ctx.send(error.message)
         elif isinstance(error, commands.NoPrivateMessage):
-            await ctx.send(_("That command is not available in DMs."))
+            message = cross(_("That command is not available in DMs."))
+            try:
+                await ctx.reply(message, mention_author=False)
+            except discord.HTTPException:
+                await ctx.send(message)
         elif isinstance(error, commands.PrivateMessageOnly):
-            await ctx.send(_("That command is only available in DMs."))
+            message = cross(_("That command is only available in DMs."))
+            try:
+                await ctx.reply(message, mention_author=False)
+            except discord.HTTPException:
+                await ctx.send(message)
         elif isinstance(error, commands.NSFWChannelRequired):
-            await ctx.send(_("That command is only available in NSFW channels."))
+            m = cross(_("That command is only available in NSFW channels."))
+            try:
+                await ctx.reply(m, mention_author=False)
+            except discord.HTTPException:
+                await ctx.send(m)
         elif isinstance(error, commands.CheckFailure):
             pass
         elif isinstance(error, commands.CommandOnCooldown):
-            if bot._bypass_cooldowns and ctx.author.id in bot.owner_ids:
+            if ctx.bot._bypass_cooldowns and ctx.author.id in bot.owner_ids:
                 ctx.command.reset_cooldown(ctx)
                 new_ctx = await bot.get_context(ctx.message)
                 await bot.invoke(new_ctx)
                 return
-            relative_time = discord.utils.format_dt(
-                datetime.now(timezone.utc) + timedelta(seconds=error.retry_after), "R"
+            delay = discord.utils.format_dt(
+                datetime.utcnow() + timedelta(seconds=error.retry_after), "R"
             )
-            msg = _("This command is on cooldown. Try again {relative_time}.").format(
-                relative_time=relative_time
+            msg = _("This command is on cooldown. Try again {delay}.").format(delay=delay)
+            embed = discord.Embed(
+                title=_("Command Cooldown"), description=msg, color=await ctx.embed_color()
             )
-            await ctx.send(msg, delete_after=error.retry_after)
+            try:
+                await ctx.reply(embed=embed, delete_after=error.retry_after, mention_author=False)
+            except discord.HTTPException:
+                await ctx.send(embed=embed, delete_after=error.retry_after)
         elif isinstance(error, commands.MaxConcurrencyReached):
             if error.per is commands.BucketType.default:
                 if error.number > 1:
                     msg = _(
-                        "Too many people using this command."
-                        " It can only be used {number} times concurrently."
+                        "Too many people using this command.\n"
+                        "It can only be used **__{number} times__** concurrently."
                     ).format(number=error.number)
                 else:
                     msg = _(
-                        "Too many people using this command."
-                        " It can only be used once concurrently."
+                        "Too many people using this command.\n"
+                        "It can only be used once concurrently."
                     )
             elif error.per in (commands.BucketType.user, commands.BucketType.member):
                 if error.number > 1:
                     msg = _(
-                        "That command is still completing,"
-                        " it can only be used {number} times per {type} concurrently."
+                        "That command is still completing.\n"
+                        "It can only be used **__{number} times per {type}__** concurrently."
                     ).format(number=error.number, type=error.per.name)
                 else:
                     msg = _(
-                        "That command is still completing,"
-                        " it can only be used once per {type} concurrently."
+                        "That command is still completing.\n"
+                        "It can only be used **__once per {type}__** concurrently."
                     ).format(type=error.per.name)
             else:
                 if error.number > 1:
                     msg = _(
-                        "Too many people using this command."
-                        " It can only be used {number} times per {type} concurrently."
+                        "Too many people using this command.\n"
+                        "It can only be used **__{number} times per {type}__** concurrently."
                     ).format(number=error.number, type=error.per.name)
                 else:
                     msg = _(
-                        "Too many people using this command."
-                        " It can only be used once per {type} concurrently."
+                        "Too many people using this command.\n"
+                        "It can only be used **__once per {type}__** concurrently."
                     ).format(type=error.per.name)
-            await ctx.send(msg)
+            mc_embed = discord.Embed(
+                title="Max Concurrency Reached",
+                description=msg,
+                color=await ctx.embed_color(),
+            )
+            try:
+                await ctx.reply(embed=mc_embed, mention_author=False)
+            except discord.HTTPException:
+                await ctx.send(embed=mc_embed)
         else:
             log.exception(type(error).__name__, exc_info=error)
 
@@ -476,7 +557,7 @@ def init_events(bot, cli_flags):
             not bot._checked_time_accuracy
             or (discord_now - timedelta(minutes=60)) > bot._checked_time_accuracy
         ):
-            system_now = datetime.now(timezone.utc)
+            system_now = datetime.now(tz=timezone.utc)
             diff = abs((discord_now - system_now).total_seconds())
             if diff > 60:
                 log.warning(

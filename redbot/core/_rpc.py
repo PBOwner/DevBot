@@ -12,7 +12,7 @@ from redbot.core._cli import ExitCodes
 
 log = logging.getLogger("red.rpc")
 
-__all__ = ("RPC", "RPCMixin", "get_name")
+__all__ = ["RPC", "RPCMixin", "get_name"]
 
 
 def get_name(func, prefix=""):
@@ -174,7 +174,7 @@ class RPCMixin:
 
     def unregister_rpc_handler(self, method):
         """
-        Deregisters an RPC method handler.
+        Unregisters an RPC method handler.
 
         This will be called automatically for you on cog unload and will pass silently if the
         method is not previously registered.

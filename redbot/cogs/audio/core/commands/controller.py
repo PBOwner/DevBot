@@ -2,15 +2,14 @@ import asyncio
 import contextlib
 import time
 from pathlib import Path
-
-from typing import Optional, Union
+from typing import Optional
 
 import discord
 import lavalink
 from lavalink import NodeNotFound
 from red_commons.logging import getLogger
 
-from redbot.core import commands
+from redbot.core import app_commands, commands
 from redbot.core.i18n import Translator
 from redbot.core.utils import AsyncIter
 from redbot.core.utils.chat_formatting import humanize_number
@@ -25,11 +24,11 @@ _ = Translator("Audio", Path(__file__))
 
 
 class PlayerControllerCommands(MixinMeta, metaclass=CompositeMetaClass):
-    @commands.command(name="disconnect")
+    @commands.hybrid_command(name="disconnect", aliases=["dc"])
     @commands.guild_only()
     @commands.bot_has_permissions(embed_links=True)
     async def command_disconnect(self, ctx: commands.Context):
-        """Disconnect from the voice channel."""
+        """Disconnects the bot from the voice channel."""
         if not self._player_check(ctx):
             return await self.send_embed_msg(ctx, title=_("Nothing playing."))
         else:
@@ -62,7 +61,7 @@ class PlayerControllerCommands(MixinMeta, metaclass=CompositeMetaClass):
                     description=_("You need the DJ role to disconnect."),
                 )
 
-            await self.send_embed_msg(ctx, title=_("Disconnecting..."))
+            await ctx.tick()
             self.bot.dispatch("red_audio_audio_disconnect", ctx.guild)
             self.update_player_lock(ctx, False)
             eq = player.fetch("eq")
@@ -73,17 +72,19 @@ class PlayerControllerCommands(MixinMeta, metaclass=CompositeMetaClass):
                 await self.config.custom("EQUALIZER", ctx.guild.id).eq_bands.set(eq.bands)
             await player.stop()
             await player.disconnect()
+            await self.send_embed_msg(
+                ctx, description=f"Disconnected from {player.channel.mention}"
+            )
             await self.config.guild_from_id(guild_id=ctx.guild.id).currently_auto_playing_in.set(
                 []
             )
             self._ll_guild_updates.discard(ctx.guild.id)
             await self.api_interface.persistent_queue_api.drop(ctx.guild.id)
 
-    @commands.command(name="now")
+    @commands.hybrid_command(name="nowplaying", aliases=["now", "np"])
     @commands.guild_only()
-    @commands.bot_has_permissions(embed_links=True)
-    @commands.bot_can_react()
-    async def command_now(self, ctx: commands.Context):
+    @commands.bot_has_permissions(add_reactions=True, embed_links=True)
+    async def command_nowplaying(self, ctx: commands.Context):
         """Now playing."""
         if not self._player_check(ctx):
             return await self.send_embed_msg(ctx, title=_("Nothing playing."))
@@ -181,7 +182,7 @@ class PlayerControllerCommands(MixinMeta, metaclass=CompositeMetaClass):
         react = reacts[r.emoji]
         if react == "prev":
             await self._clear_react(message, emoji)
-            await ctx.invoke(self.command_prev)
+            await ctx.invoke(self.command_previous)
         elif react == "stop":
             await self._clear_react(message, emoji)
             await ctx.invoke(self.command_stop)
@@ -194,7 +195,7 @@ class PlayerControllerCommands(MixinMeta, metaclass=CompositeMetaClass):
         elif react == "close":
             await message.delete()
 
-    @commands.command(name="pause")
+    @commands.hybrid_command(name="pause")
     @commands.guild_only()
     @commands.bot_has_permissions(embed_links=True)
     async def command_pause(self, ctx: commands.Context):
@@ -236,10 +237,10 @@ class PlayerControllerCommands(MixinMeta, metaclass=CompositeMetaClass):
 
         await self.send_embed_msg(ctx, title=_("Nothing playing."))
 
-    @commands.command(name="prev")
+    @commands.hybrid_command(name="previous", aliases=["prev"])
     @commands.guild_only()
     @commands.bot_has_permissions(embed_links=True)
-    async def command_prev(self, ctx: commands.Context):
+    async def command_previous(self, ctx: commands.Context):
         """Skip to the start of the previously played track."""
         if not self._player_check(ctx):
             return await self.send_embed_msg(ctx, title=_("Nothing playing."))
@@ -299,10 +300,13 @@ class PlayerControllerCommands(MixinMeta, metaclass=CompositeMetaClass):
             embed = discord.Embed(title=_("Replaying Track"), description=description)
             await self.send_embed_msg(ctx, embed=embed)
 
-    @commands.command(name="seek")
+    @commands.hybrid_command(name="seek")
+    @app_commands.describe(
+        seconds="The player position to seek to. Accepts seconds or a format (hh:mm:ss or mm:ss)"
+    )
     @commands.guild_only()
     @commands.bot_has_permissions(embed_links=True)
-    async def command_seek(self, ctx: commands.Context, seconds: Union[int, str]):
+    async def command_seek(self, ctx: commands.Context, seconds: str):
         """Seek ahead or behind on a track by seconds or to a specific time.
 
         Accepts seconds or a value formatted like 00:00:00 (`hh:mm:ss`) or 00:00 (`mm:ss`).
@@ -346,19 +350,19 @@ class PlayerControllerCommands(MixinMeta, metaclass=CompositeMetaClass):
                 )
             else:
                 try:
-                    int(seconds)
+                    seconds = int(seconds)
                     abs_position = False
                 except ValueError:
-                    abs_position = True
                     seconds = self.time_convert(seconds)
+                    abs_position = True
                 if seconds == 0:
                     return await self.send_embed_msg(
                         ctx,
                         title=_("Unable To Seek Tracks"),
                         description=_("Invalid input for the time to seek."),
                     )
+                time_sec = seconds * 1000
                 if not abs_position:
-                    time_sec = int(seconds) * 1000
                     seek = player.position + time_sec
                     if seek <= 0:
                         await self.send_embed_msg(
@@ -378,13 +382,13 @@ class PlayerControllerCommands(MixinMeta, metaclass=CompositeMetaClass):
                 else:
                     await self.send_embed_msg(
                         ctx,
-                        title=_("Moved to {time}").format(time=self.format_time(seconds * 1000)),
+                        title=_("Moved to {time}").format(time=self.format_time(time_sec)),
                     )
-                    await player.seek(seconds * 1000)
+                    await player.seek(time_sec)
         else:
             await self.send_embed_msg(ctx, title=_("Nothing playing."))
 
-    @commands.group(name="shuffle", autohelp=False)
+    @commands.hybrid_group(name="shuffle", autohelp=False)
     @commands.guild_only()
     @commands.bot_has_permissions(embed_links=True)
     async def command_shuffle(self, ctx: commands.Context):
@@ -428,7 +432,7 @@ class PlayerControllerCommands(MixinMeta, metaclass=CompositeMetaClass):
     @command_shuffle.command(name="bumped")
     @commands.guild_only()
     @commands.bot_has_permissions(embed_links=True)
-    async def command_shuffle_bumpped(self, ctx: commands.Context):
+    async def command_shuffle_bumped(self, ctx: commands.Context):
         """Toggle bumped track shuffle.
 
         Set this to disabled if you wish to avoid bumped songs being shuffled. This takes priority
@@ -469,7 +473,9 @@ class PlayerControllerCommands(MixinMeta, metaclass=CompositeMetaClass):
         if self._player_check(ctx):
             await self.set_player_settings(ctx)
 
-    @commands.command(name="skip")
+    @commands.hybrid_command(name="skip")
+    @app_commands.describe(skip_to_track="The track number to skip to.")
+    @app_commands.rename(skip_to_track="track")
     @commands.guild_only()
     @commands.bot_has_permissions(embed_links=True)
     async def command_skip(self, ctx: commands.Context, skip_to_track: int = None):
@@ -559,7 +565,7 @@ class PlayerControllerCommands(MixinMeta, metaclass=CompositeMetaClass):
         else:
             return await self._skip_action(ctx, skip_to_track)
 
-    @commands.command(name="stop")
+    @commands.hybrid_command(name="stop")
     @commands.guild_only()
     @commands.bot_has_permissions(embed_links=True)
     async def command_stop(self, ctx: commands.Context):
@@ -614,12 +620,12 @@ class PlayerControllerCommands(MixinMeta, metaclass=CompositeMetaClass):
             await self.send_embed_msg(ctx, title=_("Stopping..."))
             await self.api_interface.persistent_queue_api.drop(ctx.guild.id)
 
-    @commands.command(name="summon")
+    @commands.hybrid_command(name="connect", aliases=["join", "summon"])
     @commands.guild_only()
     @commands.cooldown(1, 15, commands.BucketType.guild)
     @commands.bot_has_permissions(embed_links=True)
-    async def command_summon(self, ctx: commands.Context):
-        """Summon the bot to a voice channel."""
+    async def command_connect(self, ctx: commands.Context):
+        """Connects the bot to a voice channel."""
         dj_enabled = self._dj_status_cache.setdefault(
             ctx.guild.id, await self.config.guild(ctx.guild).dj_enabled()
         )
@@ -632,7 +638,7 @@ class PlayerControllerCommands(MixinMeta, metaclass=CompositeMetaClass):
             return await self.send_embed_msg(
                 ctx,
                 title=_("Unable To Join Voice Channel"),
-                description=_("There are other people listening."),
+                description=f"There are other people listening in {ctx.me.voice.channel.mention}",
             )
         if dj_enabled and not vote_enabled and not (can_skip or is_requester) and not is_alone:
             ctx.command.reset_cooldown(ctx)
@@ -643,70 +649,72 @@ class PlayerControllerCommands(MixinMeta, metaclass=CompositeMetaClass):
             )
 
         try:
+            channel = ctx.author.voice.channel
             if (
-                not self.can_join_and_speak(ctx.author.voice.channel)
+                not self.can_join_and_speak(channel)
                 or not ctx.author.voice.channel.permissions_for(ctx.me).move_members
-                and self.is_vc_full(ctx.author.voice.channel)
+                and self.is_vc_full(channel)
             ):
                 ctx.command.reset_cooldown(ctx)
                 return await self.send_embed_msg(
                     ctx,
                     title=_("Unable To Join Voice Channel"),
-                    description=_("I don't have permission to connect and speak in your channel."),
+                    description=(
+                        f"I don't have permission to connect and speak in {channel.mention}"
+                    ),
                 )
             if not self._player_check(ctx):
                 player = await lavalink.connect(
-                    ctx.author.voice.channel,
+                    channel,
                     self_deaf=await self.config.guild_from_id(ctx.guild.id).auto_deafen(),
                 )
                 player.store("notify_channel", ctx.channel.id)
             else:
                 player = lavalink.get_player(ctx.guild.id)
                 player.store("notify_channel", ctx.channel.id)
-                if (
-                    ctx.author.voice.channel == player.channel
-                    and ctx.guild.me in ctx.author.voice.channel.members
-                ):
+                if channel == player.channel and ctx.guild.me in channel.members:
                     ctx.command.reset_cooldown(ctx)
                     return await self.send_embed_msg(
                         ctx,
                         title=_("Unable To Do This Action"),
-                        description=_("I am already in your channel."),
+                        description=_("I'm already in your channel."),
                     )
                 await player.move_to(
                     ctx.author.voice.channel,
                     self_deaf=await self.config.guild_from_id(ctx.guild.id).auto_deafen(),
                 )
             await ctx.tick()
+            await self.send_embed_msg(ctx, description=f"Connected to {player.channel.mention}")
         except AttributeError:
             ctx.command.reset_cooldown(ctx)
             return await self.send_embed_msg(
                 ctx,
                 title=_("Unable To Join Voice Channel"),
-                description=_("Connect to a voice channel first."),
+                description=_("Please connect to a voice channel first."),
             )
         except NodeNotFound:
             ctx.command.reset_cooldown(ctx)
             return await self.send_embed_msg(
                 ctx,
                 title=_("Unable To Join Voice Channel"),
-                description=_("Connection to the Lavalink node has not yet been established."),
+                description=_("Connection to the Lavalink node hasn't been established yet."),
             )
 
-    @commands.command(name="volume")
+    @commands.hybrid_command(name="volume", aliases=["vol"])
+    @app_commands.describe(volume="The volume percentage.")
     @commands.guild_only()
     @commands.bot_has_permissions(embed_links=True)
-    async def command_volume(self, ctx: commands.Context, vol: int = None):
-        """Set the volume, 1% - 150%."""
+    async def command_volume(self, ctx: commands.Context, volume: int = None):
+        """View current volume. Pass a number to set the volume."""
         dj_enabled = self._dj_status_cache.setdefault(
             ctx.guild.id, await self.config.guild(ctx.guild).dj_enabled()
         )
         can_skip = await self._can_instaskip(ctx, ctx.author)
         max_volume = await self.config.guild(ctx.guild).max_volume()
 
-        if not vol:
-            vol = await self.config.guild(ctx.guild).volume()
-            embed = discord.Embed(title=_("Current Volume:"), description=f"{vol}%")
+        if not volume:
+            volume = await self.config.guild(ctx.guild).volume()
+            embed = discord.Embed(title=_("Current Volume:"), description=f"{volume}%")
             if not self._player_check(ctx):
                 embed.set_footer(text=_("Nothing playing."))
             return await self.send_embed_msg(ctx, embed=embed)
@@ -728,19 +736,19 @@ class PlayerControllerCommands(MixinMeta, metaclass=CompositeMetaClass):
                 description=_("You need the DJ role to change the volume."),
             )
 
-        vol = max(0, min(vol, max_volume))
-        await self.config.guild(ctx.guild).volume.set(vol)
+        volume = max(0, min(volume, max_volume))
+        await self.config.guild(ctx.guild).volume.set(volume)
         if self._player_check(ctx):
             player = lavalink.get_player(ctx.guild.id)
-            await player.set_volume(vol)
+            await player.set_volume(volume)
             player.store("notify_channel", ctx.channel.id)
 
-        embed = discord.Embed(title=_("Volume:"), description=f"{vol}%")
+        embed = discord.Embed(title=_("Volume:"), description=f"{volume}%")
         if not self._player_check(ctx):
             embed.set_footer(text=_("Nothing playing."))
         await self.send_embed_msg(ctx, embed=embed)
 
-    @commands.command(name="repeat")
+    @commands.hybrid_command(name="repeat", aliases=["loop"])
     @commands.guild_only()
     @commands.bot_has_permissions(embed_links=True)
     async def command_repeat(self, ctx: commands.Context):
@@ -784,10 +792,11 @@ class PlayerControllerCommands(MixinMeta, metaclass=CompositeMetaClass):
         if self._player_check(ctx):
             await self.set_player_settings(ctx)
 
-    @commands.command(name="remove")
+    @commands.hybrid_command(name="remove")
+    @app_commands.describe(index_or_url="The track number or URL to remove from the queue.")
     @commands.guild_only()
     @commands.bot_has_permissions(embed_links=True)
-    async def command_remove(self, ctx: commands.Context, index_or_url: Union[int, str]):
+    async def command_remove(self, ctx: commands.Context, index_or_url: str):
         """Remove a specific track number from the queue."""
         dj_enabled = self._dj_status_cache.setdefault(
             ctx.guild.id, await self.config.guild(ctx.guild).dj_enabled()
@@ -811,6 +820,10 @@ class PlayerControllerCommands(MixinMeta, metaclass=CompositeMetaClass):
                 description=_("You must be in the voice channel to manage the queue."),
             )
         player.store("notify_channel", ctx.channel.id)
+        try:
+            index_or_url = int(index_or_url)
+        except ValueError:
+            pass
         if isinstance(index_or_url, int):
             if index_or_url > len(player.queue) or index_or_url < 1:
                 return await self.send_embed_msg(
@@ -861,7 +874,8 @@ class PlayerControllerCommands(MixinMeta, metaclass=CompositeMetaClass):
                     ).format(removed_tracks=removed_tracks),
                 )
 
-    @commands.command(name="bump")
+    @commands.hybrid_command(name="bump")
+    @app_commands.describe(index="The track number to bump to the top of the queue.")
     @commands.guild_only()
     @commands.bot_has_permissions(embed_links=True)
     async def command_bump(self, ctx: commands.Context, index: int):

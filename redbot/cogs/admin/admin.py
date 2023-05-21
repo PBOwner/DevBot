@@ -76,13 +76,7 @@ class Admin(commands.Cog):
         self.bot = bot
 
         self.config = Config.get_conf(self, 8237492837454039, force_registration=True)
-
-        self.config.register_global(serverlocked=False, schema_version=0)
-
-        self.config.register_guild(
-            announce_channel=None,  # Integer ID
-            selfroles=[],  # List of integer ID's
-        )
+        self.config.register_guild(announce_channel=None, selfroles=[])
 
         self.__current_announcer = None
 
@@ -154,7 +148,7 @@ class Admin(commands.Cog):
     async def _addrole(
         self, ctx: commands.Context, member: discord.Member, role: discord.Role, *, check_user=True
     ):
-        if member.get_role(role.id) is not None:
+        if member.get_role(role.id):
             await ctx.send(
                 _("{member.display_name} already has the role {role.name}.").format(
                     role=role, member=member
@@ -185,7 +179,7 @@ class Admin(commands.Cog):
     async def _removerole(
         self, ctx: commands.Context, member: discord.Member, role: discord.Role, *, check_user=True
     ):
-        if member.get_role(role.id) is None:
+        if not member.get_role(role.id):
             await ctx.send(
                 _("{member.display_name} does not have the role {role.name}.").format(
                     role=role, member=member
@@ -219,7 +213,7 @@ class Admin(commands.Cog):
     async def addrole(
         self,
         ctx: commands.Context,
-        rolename: discord.Role,
+        role: discord.Role,
         *,
         user: discord.Member = commands.Author,
     ):
@@ -229,7 +223,7 @@ class Admin(commands.Cog):
         Use double quotes if the role contains spaces.
         If user is left blank it defaults to the author of the command.
         """
-        await self._addrole(ctx, user, rolename)
+        await self._addrole(ctx, user, role)
 
     @commands.command()
     @commands.guild_only()
@@ -237,7 +231,7 @@ class Admin(commands.Cog):
     async def removerole(
         self,
         ctx: commands.Context,
-        rolename: discord.Role,
+        role: discord.Role,
         *,
         user: discord.Member = commands.Author,
     ):
@@ -247,7 +241,9 @@ class Admin(commands.Cog):
         Use double quotes if the role contains spaces.
         If user is left blank it defaults to the author of the command.
         """
-        await self._removerole(ctx, user, rolename)
+        if user is None:
+            user = ctx.author
+        await self._removerole(ctx, user, role)
 
     @commands.group()
     @commands.guild_only()
@@ -401,7 +397,7 @@ class Admin(commands.Cog):
         Server admins must have configured the role as user settable.
         NOTE: The role is case sensitive!
         """
-        if ctx.author.get_role(selfrole.id) is not None:
+        if ctx.author.get_role(selfrole.id):
             return await self._removerole(ctx, ctx.author, selfrole, check_user=False)
         else:
             return await self._addrole(ctx, ctx.author, selfrole, check_user=False)
@@ -542,31 +538,3 @@ class Admin(commands.Cog):
             await ctx.send(_("Selfrole list cleared."))
         else:
             await ctx.send(_("No changes have been made."))
-
-    @commands.command()
-    @commands.is_owner()
-    async def serverlock(self, ctx: commands.Context):
-        """Lock a bot to its current servers only."""
-        serverlocked = await self.config.serverlocked()
-        await self.config.serverlocked.set(not serverlocked)
-
-        if serverlocked:
-            await ctx.send(_("The bot is no longer serverlocked."))
-        else:
-            await ctx.send(_("The bot is now serverlocked."))
-
-    # region Event Handlers
-    @commands.Cog.listener()
-    async def on_guild_join(self, guild: discord.Guild):
-        if await self.config.serverlocked():
-            if len(self.bot.guilds) == 1:  # will be 0 once left
-                log.warning(
-                    f"Leaving guild '{guild.name}' ({guild.id}) due to serverlock. You can "
-                    "temporarily disable serverlock by starting up the bot with the --no-cogs flag."
-                )
-            else:
-                log.info(f"Leaving guild '{guild.name}' ({guild.id}) due to serverlock.")
-            await guild.leave()
-
-
-# endregion

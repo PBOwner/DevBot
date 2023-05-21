@@ -14,7 +14,6 @@ from typing import (
     TYPE_CHECKING,
     Optional,
     Optional as NoParseOptional,
-    Tuple,
     List,
     Dict,
     Type,
@@ -37,6 +36,7 @@ __all__ = [
     "UserInputOptional",
     "NoParseOptional",
     "RelativedeltaConverter",
+    "PositiveInt",
     "TimedeltaConverter",
     "finite_float",
     "get_dict_converter",
@@ -237,7 +237,7 @@ class RawUserIdConverter(dpy_commands.Converter):
 # and ensure the lies stay correct for how the object should look as a typehint
 
 #: This converts a user provided string into a positive (>=0) integer.
-positive_int = dpy_commands.Range[int, 0, None]
+PositiveInt = positive_int = dpy_commands.Range[int, 0, None]
 
 
 if TYPE_CHECKING:

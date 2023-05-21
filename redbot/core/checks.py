@@ -11,7 +11,6 @@ from .commands import (
     mod_or_permissions,
 )
 
-
 __all__ = [
     "bot_has_permissions",
     "bot_in_a_guild",

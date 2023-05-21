@@ -5,7 +5,6 @@ import aiohttp
 
 from redbot.core.i18n import Translator, cog_i18n
 from redbot.core import Config, commands
-from redbot.core.commands import UserInputOptional
 
 _ = Translator("Image", __file__)
 
@@ -48,7 +47,7 @@ class Image(commands.Cog):
         pass
 
     @_imgur.command(name="search", usage="[count] <terms...>")
-    async def imgur_search(self, ctx, count: UserInputOptional[int] = 1, *, term: str):
+    async def imgur_search(self, ctx, count: int = 1, *, term: str):
         """Search Imgur for the specified term.
 
         - `[count]`: How many images should be returned (maximum 5). Defaults to 1.

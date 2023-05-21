@@ -1,6 +1,4 @@
 import asyncio
-import logging
-import re
 from abc import ABC
 from collections import defaultdict
 from typing import Literal
@@ -170,7 +168,7 @@ class Mod(
                         guild_data["mention_spam"]["ban"] = current_state
             await self.config.version.set("1.3.0")
 
-    @commands.command(hidden=True)
+    @commands.command()
     @commands.is_owner()
     async def moveignoredchannels(self, ctx: commands.Context) -> None:
         """Move ignored channels and servers to core"""
@@ -184,7 +182,7 @@ class Mod(
             await self.config.channel_from_id(channel_id).clear()
         await ctx.send(_("Ignored channels and guilds restored."))
 
-    @commands.command(hidden=True)
+    @commands.command()
     @commands.is_owner()
     async def movedeletedelay(self, ctx: commands.Context) -> None:
         """

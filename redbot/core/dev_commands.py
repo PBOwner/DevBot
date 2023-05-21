@@ -27,6 +27,7 @@ from typing import Any, Awaitable, Dict, Iterator, List, Literal, Tuple, Type, T
 from types import CodeType, TracebackType
 
 import discord
+import redbot
 
 from . import commands
 from .commands import NoParseOptional as Optional
@@ -386,6 +387,13 @@ class DevOutput:
 class Dev(commands.Cog):
     """Various development focused utilities."""
 
+    def __init__(self) -> None:
+        super().__init__()
+        self._last_result = None
+        self.sessions = {}
+        self.env_extensions = {}
+        self.source_cache = SourceCache()
+
     async def red_delete_data_for_user(self, **kwargs: Any) -> None:
         """
         Because despite my best efforts to advise otherwise,
@@ -393,12 +401,10 @@ class Dev(commands.Cog):
         """
         return
 
-    def __init__(self) -> None:
-        super().__init__()
-        self._last_result = None
-        self.sessions = {}
-        self.env_extensions = {}
-        self.source_cache = SourceCache()
+    # Necessary until Zeph's RTFS cog stops implementing this
+    @staticmethod
+    def cleanup_code(content: str) -> str:
+        return cleanup_code(content)
 
     def get_environment(self, ctx: commands.Context) -> dict:
         env = {
@@ -411,6 +417,7 @@ class Dev(commands.Cog):
             "asyncio": asyncio,
             "aiohttp": aiohttp,
             "discord": discord,
+            "redbot": redbot,
             "commands": commands,
             "cf": chat_formatting,
             "_": self._last_result,
@@ -588,8 +595,8 @@ class Dev(commands.Cog):
     @commands.guild_only()
     @commands.command()
     @commands.is_owner()
-    async def mock(self, ctx: commands.Context, user: discord.Member, *, command: str) -> None:
-        """Mock another user invoking a command.
+    async def mimic(self, ctx: commands.Context, user: discord.Member, *, command: str) -> None:
+        """Mimic another user invoking a command.
 
         The prefix must not be entered.
         """
@@ -600,9 +607,9 @@ class Dev(commands.Cog):
         ctx.bot.dispatch("message", msg)
 
     @commands.guild_only()
-    @commands.command(name="mockmsg")
+    @commands.command(name="mimicmsg")
     @commands.is_owner()
-    async def mock_msg(
+    async def mimic_msg(
         self, ctx: commands.Context, user: discord.Member, *, content: str = ""
     ) -> None:
         """Dispatch a message event as if it were sent by a different user.

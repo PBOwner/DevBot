@@ -1,6 +1,5 @@
 import asyncio
 import contextlib
-from datetime import timezone
 from collections import namedtuple
 from copy import copy
 from typing import Union, Literal
@@ -15,10 +14,8 @@ from redbot.cogs.warnings.helpers import (
 )
 from redbot.core import Config, commands, modlog
 from redbot.core.bot import Red
-from redbot.core.commands import UserInputOptional
 from redbot.core.i18n import Translator, cog_i18n
-from redbot.core.utils import AsyncIter
-from redbot.core.utils.chat_formatting import warning, pagify
+from redbot.core.utils.chat_formatting import pagify
 from redbot.core.utils.menus import menu
 
 
@@ -374,7 +371,7 @@ class Warnings(commands.Cog):
         self,
         ctx: commands.Context,
         member: discord.Member,
-        points: UserInputOptional[int] = 1,
+        points: int = 1,
         *,
         reason: str,
     ):

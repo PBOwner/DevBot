@@ -646,7 +646,7 @@ class PlaylistCommands(MixinMeta, metaclass=CompositeMetaClass):
         self,
         ctx: commands.Context,
         playlist_matches: PlaylistConverter,
-        v2: UserInputOptional[bool] = False,
+        v2: bool = False,
         *,
         scope_data: ScopeParser = None,
     ):

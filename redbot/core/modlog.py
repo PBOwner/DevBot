@@ -659,7 +659,7 @@ class Case:
 
         Parameters
         ----------
-        mod_channel: `discord.TextChannel` or `discord.VoiceChannel`, `discord.StageChannel`
+        mod_channel: `discord.TextChannel`, `discord.VoiceChannel`, or `discord.StageChannel`
             The mod log channel for the guild
         bot: Red
             The bot's instance. Needed to get the target user

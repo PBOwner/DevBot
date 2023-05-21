@@ -5,6 +5,8 @@ import itertools
 import math
 import textwrap
 from io import BytesIO
+from rich.console import Console
+from rich.errors import MarkupError
 from typing import Iterator, List, Optional, Sequence, SupportsInt, Union
 
 import discord
@@ -14,6 +16,7 @@ from babel.numbers import format_decimal
 from redbot.core.i18n import Translator, get_babel_locale, get_babel_regional_format
 
 __all__ = (
+    "ansify",
     "error",
     "warning",
     "info",
@@ -39,57 +42,6 @@ __all__ = (
 _ = Translator("UtilsChatFormatting", __file__)
 
 
-def error(text: str) -> str:
-    """Get text prefixed with an error emoji.
-
-    Parameters
-    ----------
-    text : str
-        The text to be prefixed.
-
-    Returns
-    -------
-    str
-        The new message.
-
-    """
-    return f"\N{NO ENTRY SIGN} {text}"
-
-
-def warning(text: str) -> str:
-    """Get text prefixed with a warning emoji.
-
-    Parameters
-    ----------
-    text : str
-        The text to be prefixed.
-
-    Returns
-    -------
-    str
-        The new message.
-
-    """
-    return f"\N{WARNING SIGN}\N{VARIATION SELECTOR-16} {text}"
-
-
-def info(text: str) -> str:
-    """Get text prefixed with an info emoji.
-
-    Parameters
-    ----------
-    text : str
-        The text to be prefixed.
-
-    Returns
-    -------
-    str
-        The new message.
-
-    """
-    return f"\N{INFORMATION SOURCE}\N{VARIATION SELECTOR-16} {text}"
-
-
 def success(text: str) -> str:
     """Get text prefixed with a success emoji.
 
@@ -104,7 +56,24 @@ def success(text: str) -> str:
         The new message.
 
     """
-    return f"\N{WHITE HEAVY CHECK MARK} {text}"
+    return f"<a:Tick:984377373841575936> {text}"
+
+
+def error(text: str) -> str:
+    """Get text prefixed with an error emoji.
+
+    Parameters
+    ----------
+    text : str
+        The text to be prefixed.
+
+    Returns
+    -------
+    str
+        The new message.
+
+    """
+    return f"<a:Cross:984377347958538262> {text}"
 
 
 def question(text: str) -> str:
@@ -121,7 +90,41 @@ def question(text: str) -> str:
         The new message.
 
     """
-    return f"\N{BLACK QUESTION MARK ORNAMENT}\N{VARIATION SELECTOR-16} {text}"
+    return f"<a:Question:924366007596908605> {text}"
+
+
+def info(text: str) -> str:
+    """Get text prefixed with an info emoji.
+
+    Parameters
+    ----------
+    text : str
+        The text to be prefixed.
+
+    Returns
+    -------
+    str
+        The new message.
+
+    """
+    return f"<a:Information:984377300256706630> {text}"
+
+
+def warning(text: str) -> str:
+    """Get text prefixed with a warning emoji.
+
+    Parameters
+    ----------
+    text : str
+        The text to be prefixed.
+
+    Returns
+    -------
+    str
+        The new message.
+
+    """
+    return f"<a:Warning:984377273790627840> {text}"
 
 
 def bold(text: str, escape_formatting: bool = True) -> str:
@@ -226,10 +229,73 @@ def spoiler(text: str, escape_formatting: bool = True) -> str:
     return f"||{escape(text, formatting=escape_formatting)}||"
 
 
+def bordered(*columns: Sequence[str], ascii_border: bool = False) -> str:
+    """Get two blocks of text inside borders.
+
+    Note
+    ----
+    This will only work with a monospaced font.
+
+    Parameters
+    ----------
+    *columns : `sequence` of `str`
+        The columns of text, each being a list of lines in that column.
+    ascii_border : bool
+        Whether or not the border should be pure ASCII.
+
+    Returns
+    -------
+    str
+        The bordered text.
+
+    """
+    borders = {
+        "TL": "+" if ascii_border else "┌",  # Top-left
+        "TR": "+" if ascii_border else "┐",  # Top-right
+        "BL": "+" if ascii_border else "└",  # Bottom-left
+        "BR": "+" if ascii_border else "┘",  # Bottom-right
+        "HZ": "-" if ascii_border else "─",  # Horizontal
+        "VT": "|" if ascii_border else "│",  # Vertical
+    }
+
+    sep = " " * 4  # Separator between boxes
+    widths = tuple(max(len(row) for row in column) + 9 for column in columns)  # width of each col
+    colsdone = [False] * len(columns)  # whether or not each column is done
+    lines = [sep.join("{TL}" + "{HZ}" * width + "{TR}" for width in widths)]
+
+    for line in itertools.zip_longest(*columns):
+        row = []
+        for colidx, column in enumerate(line):
+            width = widths[colidx]
+            done = colsdone[colidx]
+            if column is None:
+                if not done:
+                    # bottom border of column
+                    column = "{HZ}" * width
+                    row.append("{BL}" + column + "{BR}")
+                    colsdone[colidx] = True  # mark column as done
+                else:
+                    # leave empty
+                    row.append(" " * (width + 2))
+            else:
+                column += " " * (width - len(column))  # append padded spaces
+                row.append("{VT}" + column + "{VT}")
+
+        lines.append(sep.join(row))
+
+    final_row = []
+    for width, done in zip(widths, colsdone):
+        if not done:
+            final_row.append("{BL}" + "{HZ}" * width + "{BR}")
+        else:
+            final_row.append(" " * (width + 2))
+    lines.append(sep.join(final_row))
+
+    return "\n".join(lines).format(**borders)
+
+
 class pagify(Iterator[str]):
     """Generate multiple pages from the given text.
-
-    The returned iterator supports length estimation with :func:`operator.length_hint()`.
 
     Note
     ----
@@ -427,6 +493,34 @@ def escape(text: str, *, mass_mentions: bool = False, formatting: bool = False) 
     return text
 
 
+def ansify(text: str, *, suppress_error: bool = True) -> str:
+    """Converts the given text with the language set to ANSI.
+
+    Parameters
+    ----------
+    text : str
+        The text to be converted.
+    suppress_error : `bool`, optional
+        Set to :code:`False` to raise an error if the text is not valid ANSI.
+
+    Returns
+    -------
+    str
+        The converted text.
+
+    """
+    console = Console(color_system="standard")
+    with console.capture() as captured:
+        try:
+            console.print(text)
+        except MarkupError as error:
+            if suppress_error:
+                console.out(text)
+            else:
+                console.out(str(error).capitalize())
+    return captured.get()
+
+
 def humanize_list(
     items: Sequence[str], *, locale: Optional[str] = None, style: str = "standard"
 ) -> str:
@@ -513,7 +607,7 @@ def format_perms_list(perms: discord.Permissions) -> str:
     perm_names: List[str] = []
     for perm, value in perms:
         if value is True:
-            perm_name = '"' + perm.replace("_", " ").title() + '"'
+            perm_name = "`" + perm.replace("_", " ").title() + "`"
             perm_names.append(perm_name)
     return humanize_list(perm_names).replace("Guild", "Server")
 
