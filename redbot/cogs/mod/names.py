@@ -177,7 +177,8 @@ class ModInfo(MixinMeta):
         If the member has no roles, previous names or previous nicknames, these fields will be omitted.
         """
         guild = ctx.guild
-        created_on = "<t:{}>\n(<t:{}:R>)".format(int(user.created_at.timestamp()))
+        timestamp = int(user.created_at.timestamp())
+        created_on = f"<t:{timestamp}>\n(<t:{timestamp}:R>)"
         names, nicks = await self.get_names_and_nicks(ctx, user)
 
         status_emoji = None
