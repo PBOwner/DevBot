@@ -207,7 +207,7 @@ class ModInfo(MixinMeta):
             status_string = self.get_status_string(user)
             roles = user.roles[-1:0:-1]
             joined_on = "{}\n({} days ago)".format(user_joined, since_joined)
-            name = f"{name} ~ {user.nick}" if user.nick else name
+            name = f"{name}\n{user.nick}" if user.nick else name
             color = user.color
             member_number = sorted(guild.members, key=lambda m: m.joined_at).index(user) + 1
             voice_state = user.voice
