@@ -5,7 +5,7 @@ from discord.errors import NotFound
 from discord.ui import Button
 from discord.utils import escape_markdown as unmarkdown
 from redbot.core import bank, commands
-from redbot.core.utils.chat_formatting import humanize_list, humanize_number
+from redbot.core.utils.chat_formatting import bold, humanize_list, humanize_number, pagify
 from redbot.core.utils.common_filters import (
     escape_spoilers_and_mass_mentions,
     filter_invites,
@@ -66,18 +66,15 @@ class ModInfo(MixinMeta):
     Commands regarding names, userinfo, etc.
     """
 
-    async def get_names_and_nicks(
-        self, ctx: commands.Context, user: Union[discord.Member, discord.User]
-    ):
-        names = await self.config.user(user).past_names()
-        nicks = None
-        if ctx.guild and ctx.guild.get_member(user.id):
-            nicks = await self.config.member(ctx.guild.get_member(user.id)).past_nicks()
-        if names:
-            names = [escape_spoilers_and_mass_mentions(name) for name in names if name]
-        if nicks:
-            nicks = [escape_spoilers_and_mass_mentions(nick) for nick in nicks if nick]
-        return names, nicks
+    async def get_names(self, user: Union[discord.Member, discord.User]):
+        user_data = await self.config.user(user).all()
+        usernames, display_names, nicks = user_data["past_names"], user_data["past_display_names"], []
+        usernames = list(map(escape_spoilers_and_mass_mentions, filter(None, usernames)))
+        display_names = list(map(escape_spoilers_and_mass_mentions, filter(None, display_names)))
+        if isinstance(user, discord.Member):
+            nicks = await self.config.member(user).past_nicks()
+        nicks = list(map(escape_spoilers_and_mass_mentions, filter(None, nicks)))
+        return usernames, display_names, nicks
 
     @staticmethod
     def handle_custom(user: Union[discord.Member, discord.User]):
@@ -172,14 +169,16 @@ class ModInfo(MixinMeta):
     ):
         """Show information about a user.
 
-        This includes fields for status, discord join date, server join date, voice state and previous names/nicknames.
+        This includes fields for status, discord join date, server join date,
+        voice state and previous usernames/display names/nicknames.
 
-        If the member has no roles, previous names or previous nicknames, these fields will be omitted.
+        If the member has no roles, previous usernames, display names, or nicknames,
+        these fields will be omitted.
         """
         guild = ctx.guild
         timestamp = int(user.created_at.timestamp())
         created_on = f"<t:{timestamp}>\n(<t:{timestamp}:R>)"
-        names, nicks = await self.get_names_and_nicks(ctx, user)
+        usernames, display_names, nicks = await self.get_names(ctx, user)
 
         status_emoji = None
         status_string = None
@@ -258,21 +257,17 @@ class ModInfo(MixinMeta):
             else:
                 data.add_field(name="Role", value=role_str, inline=False)
 
-        if names:
-            value = filter_invites(", ".join(names))
-            if len(names) > 1:
-                data.add_field(name=f"Previous Names ({len(names)})", value=value, inline=False)
-            else:
-                data.add_field(name="Previous Name", value=value, inline=False)
-
-        if nicks:
-            value = filter_invites(", ".join(nicks))
-            if len(nicks) > 1:
+        for single_form, plural_form, names in (
+            ("Previous Username", "Previous Usernames", usernames),
+            ("Previous Display Name", "Previous Display Names", display_names),
+            ("Previous Nickname", "Previous Nicknames", nicks),
+        ):
+            if names:
                 data.add_field(
-                    name=f"Previous Nicknames ({len(nicks)})", value=value, inline=False
+                    name=f"{plural_form} ({len(names)})" if len(names) > 1 else single_form,
+                    value=filter_invites(", ".join(names)),
+                    inline=False,
                 )
-            else:
-                data.add_field(name="Previous Nickname", value=value, inline=False)
 
         if voice_state:
             data.add_field(
@@ -414,31 +409,21 @@ class ModInfo(MixinMeta):
     @commands.command()
     @commands.guild_only()
     async def names(self, ctx: commands.Context, *, member: discord.Member = commands.Author):
-        """Show previous names and nicknames of a member."""
-        names, nicks = await self.get_names_and_nicks(ctx, member)
-        if not (names and nicks):
-            if member == ctx.author:
-                await ctx.send("You don't have any recorded name or nickname change.")
-            else:
-                await ctx.send("That member doesn't have any recorded name or nickname change.")
-        if await ctx.embed_requested():
-            embed = discord.Embed()
+        """Show previous usernames, display names, and server nicknames of a member."""
+        usernames, display_names, nicks = await self.get_names(member)
+        parts = []
+        for header, names in (
+            ("Past 20 usernames:", usernames),
+            ("Past 20 display names:", display_names),
+            ("Past 20 nicknames:", nicks),
+        ):
             if names:
-                embed.add_field(name="Past Names", value=", ".join(names), inline=False)
-            if nicks:
-                embed.add_field(name="Past Nicknames", value=", ".join(nicks), inline=False)
-            await ctx.send(embed=embed)
-        else:
-            msg = ""
-            if names:
-                msg += "**Past 20 Names**:\n"
-                msg += ", ".join(names)
-            if nicks:
-                msg += "\n\n" if msg else ""
-                msg += "**Past 20 Nicknames**:\n"
-                msg += ", ".join(nicks)
-            if msg:
-                await ctx.send(filter_various_mentions(msg))
+                parts.append(bold(header) + ", ".join(names))
+        if parts:
+            # each name can have 32 characters, we store 3*20 names which totals to
+            # 60*32=1920 characters which is quite close to the message length limit
+            for msg in pagify(filter_various_mentions("\n\n".join(parts))):
+                await ctx.send(msg)
 
     @commands.command()
     @commands.guild_only()
@@ -447,7 +432,7 @@ class ModInfo(MixinMeta):
     async def rename(self, ctx: commands.Context, member: discord.Member, *, nickname: str = ""):
         """Change a member's nickname.
 
-        Leaving the nickname empty will remove it.
+        Leaving the nickname argument empty will remove it.
         """
         nickname = nickname.strip()
         me = cast(discord.Member, ctx.me)

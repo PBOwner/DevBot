@@ -505,7 +505,7 @@ class ContactDmReplyModal(discord.ui.Modal):
 
         embed = discord.Embed(color=await bot.get_embed_color(user), description=message)
         embed.set_author(
-            name=f"{author} (Owner of {bot.user.name})", icon_url=author.display_avatar.url
+            name=f"{author} (Owner of {bot.user.display_name})", icon_url=author.display_avatar.url
         )
         embed.set_footer(text="You can reply to this message with the button below or /contact.")
         view = ContactDmView(bot.get_command("contact"), author)

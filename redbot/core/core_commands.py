@@ -321,7 +321,7 @@ class CoreLogic:
         if name is not None:
             return (await self.bot.user.edit(username=name)).name
 
-        return self.bot.user.name
+        return self.bot.user.display_name
 
     async def _prefixes(self, prefixes: Optional[Sequence[str]] = None) -> List[str]:
         """
@@ -540,6 +540,7 @@ class Core(commands.commands._RuleDropper, commands.Cog, CoreLogic):
     @commands.command(cls=commands.commands._AlwaysAvailableCommand)
     async def credits(self, ctx: commands.Context):
         """Shows [botname]'s credits."""
+        bot_name = self.bot.user.display_name
         org = "https://github.com/Cog-Creators"
         red_repo = org + "/Red-DiscordBot"
         twentysix = "https://github.com/Twentysix26"
@@ -549,13 +550,13 @@ class Core(commands.commands._RuleDropper, commands.Cog, CoreLogic):
 
         embeds = []
         embed = discord.Embed(
-            title=f"{self.bot.user.name}'s Credits",
-            description=f"Credits for all people and services that helps {self.bot.user.name} exist.",
+            title=f"{bot_name}'s Credits",
+            description=f"Credits for all people and services that helps {bot_name} exist.",
             timestamp=ctx.me.created_at,
             color=await ctx.embed_color(),
         )
         embed.set_footer(
-            text="{} exists since".format(self.bot.user.name),
+            text="{} exists since".format(bot_name),
             icon_url="https://cdn.discordapp.com/attachments/908719687397953606/921065568365322280/kiki_round.png",
         )
         embed.set_thumbnail(
@@ -1322,7 +1323,7 @@ class Core(commands.commands._RuleDropper, commands.Cog, CoreLogic):
     async def invite(self, ctx: commands.Context):
         """Shows my invite url and requirements."""
         bot = self.bot
-        title = _("Thanks for Inviting {}").format(bot.user.name)
+        title = _("Thanks for Inviting {}").format(bot.user.display_name)
         bot_invite = await bot.get_invite_url()
         server_invite = await bot.get_support_server_url()
         reqs = []
@@ -2477,7 +2478,9 @@ class Core(commands.commands._RuleDropper, commands.Cog, CoreLogic):
                     "This will delete all bank accounts for {scope}.\nIf you're sure, type "
                     "`{prefix}bankset reset yes`"
                 ).format(
-                    scope=self.bot.user.name if await bank.is_global() else _("this server"),
+                    scope=self.bot.user.display_name
+                    if await bank.is_global()
+                    else _("this server"),
                     prefix=ctx.clean_prefix,
                 )
             )
@@ -2485,7 +2488,9 @@ class Core(commands.commands._RuleDropper, commands.Cog, CoreLogic):
             await bank.wipe_bank(guild=ctx.guild)
             await ctx.send(
                 _("All bank accounts for {scope} have been deleted.").format(
-                    scope=self.bot.user.name if await bank.is_global() else _("this server")
+                    scope=self.bot.user.display_name
+                    if await bank.is_global()
+                    else _("this server")
                 )
             )
 
@@ -3762,7 +3767,7 @@ class Core(commands.commands._RuleDropper, commands.Cog, CoreLogic):
             "Global regional format: {regional_format}\n"
             "Default embed colour: {colour}"
         ).format(
-            bot_name=ctx.bot.user.name,
+            bot_name=ctx.bot.user.display_name,
             guild_name=server.name,
             prefixes=prefix_string,
             guild_settings=guild_settings,

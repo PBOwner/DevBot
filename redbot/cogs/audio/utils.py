@@ -346,5 +346,5 @@ def has_unmanaged_server():
 async def replace_p_with_prefix(bot: Red, message: str) -> str:
     """Replaces [p] with the bot prefix"""
     prefixes = await bot.get_valid_prefixes()
-    prefix = re.sub(rf"<@!?{bot.user.id}>", f"@{bot.user.name}".replace("\\", r"\\"), prefixes[0])
+    prefix = re.sub(rf"<@!?{bot.user.id}>", f"@{bot.user.display_name}".replace("\\", r"\\"), prefixes[0])
     return message.replace("[p]", prefix)
