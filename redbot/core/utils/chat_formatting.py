@@ -331,7 +331,6 @@ class pagify(Iterator[str]):
 
     """
 
-    # when changing signature of this method, please update it in docs/framework_utils.rst as well
     def __init__(
         self,
         text: str,
