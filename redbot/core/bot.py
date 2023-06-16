@@ -1955,6 +1955,10 @@ class Red(
                 subcommand.requires.reset()
         return command
 
+    def readd_command(self, command: commands.Command, /) -> None:
+        self.remove_command(command.name)
+        self.add_command(command)
+
     def hybrid_command(
         self,
         name: Union[str, app_commands.locale_str] = discord.utils.MISSING,
