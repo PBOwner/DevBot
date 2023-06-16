@@ -178,7 +178,7 @@ class ModInfo(MixinMeta):
         guild = ctx.guild
         timestamp = int(user.created_at.timestamp())
         created_on = f"<t:{timestamp}>\n(<t:{timestamp}:R>)"
-        usernames, display_names, nicks = await self.get_names(ctx, user)
+        usernames, display_names, nicks = await self.get_names(user)
 
         status_emoji = None
         status_string = None
