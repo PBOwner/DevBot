@@ -7,7 +7,7 @@ from redbot.core.i18n import Translator, cog_i18n
 from redbot.core.utils import AsyncIter
 from redbot.core.utils.chat_formatting import bold, humanize_list, humanize_number, inline
 from redbot.core.utils.menus import menu
-from redbot.core.utils.views import ConfirmationView
+from redbot.core.utils.views import ConfirmView
 from typing import Dict, List, Union
 
 _ = T_ = Translator("GuildManager", __file__)
@@ -375,12 +375,12 @@ class GuildManager(commands.Cog):
         if not guilds:
             await ctx.send(_("No blacklisted guilds found."))
             return
-        view = ConfirmationView()
-        await view.start(
-            ctx, _("Do you want me to leave {} blacklisted guilds?").format(len(guilds))
+        view = ConfirmView(ctx.author, disable_buttons=True)
+        view.message = await ctx.send(
+            _("Do you want me to leave {} blacklisted guilds?").format(len(guilds)), view=view
         )
         await view.wait()
-        if view.value:
+        if view.result:
             await self.leave_guilds(guilds)
             content = _("Done. I have left {} blacklisted guilds.").format(len(guilds))
             await view.message.edit(content=content)
@@ -401,10 +401,12 @@ class GuildManager(commands.Cog):
         if not guilds:
             await ctx.send(_("No bot farms found."))
             return
-        view = ConfirmationView()
-        await view.start(ctx, _("Do you want me to leave {} bot farms?").format(len(guilds)))
+        view = ConfirmView(ctx.author, disable_buttons=True)
+        view.message = await ctx.send(
+            _("Do you want me to leave {} bot farms?").format(len(guilds)), view=view
+        )
         await view.wait()
-        if view.value:
+        if view.result:
             await self.leave_guilds(guilds)
             content = _("Done. I have left {} bot farms.").format(len(guilds))
             await view.message.edit(content=content)
@@ -424,10 +426,12 @@ class GuildManager(commands.Cog):
         if not guilds:
             await ctx.send(_("No servers with less members than minimum found."))
             return
-        view = ConfirmationView()
-        await view.start(ctx, _("Do you want me to leave {} servers?").format(len(guilds)))
+        view = ConfirmView(ctx.author, disable_buttons=True)
+        view.message = await ctx.send(
+            _("Do you want me to leave {} servers?").format(len(guilds)), view=view
+        )
         await view.wait()
-        if view.value:
+        if view.result:
             await self.leave_guilds(guilds)
             content = _("Done. I have left {} servers.").format(len(guilds))
             await view.message.edit(content=content)

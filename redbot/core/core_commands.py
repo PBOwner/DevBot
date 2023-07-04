@@ -51,7 +51,7 @@ from .utils.chat_formatting import (
     text_to_file,
     underline,
 )
-from .utils.views import ConfirmationView, ContactDmView
+from .utils.views import ConfirmView, ContactDmView
 from .commands import CommandConverter, CogConverter
 from .commands.requires import PrivilegeLevel
 
@@ -2211,7 +2211,7 @@ class Core(commands.commands._RuleDropper, commands.Cog, CoreLogic):
                 msg += diff + command_type.ljust(7) + " | " + name + "\n"
             msg += "\n"
 
-        pages = pagify(msg, delims=["\n\n", "\n"])
+        pages = pagify(msg, delims=["\n\n", "\n"], shorten_by=12)
         pages = [box(page, lang="diff") for page in pages]
         await menu(ctx, pages)
 
@@ -2286,20 +2286,20 @@ class Core(commands.commands._RuleDropper, commands.Cog, CoreLogic):
                 embed = discord.Embed(title="Shutting Down...", color=await ctx.embed_color())
                 await ctx.send(embed=embed)
                 await self.bot.shutdown()
+                return
+            embed = discord.Embed(
+                title="Are you sure you want to shut down?", color=await ctx.embed_color()
+            )
+            view = ConfirmView(ctx.author, disable_buttons=True)
+            view.message = await ctx.send(embed=embed, view=view)
+            await view.wait()
+            if view.result:
+                embed = discord.Embed(title="Shutting Down...", color=await ctx.embed_color())
+                await view.message.edit(embed=embed)
+                await self.bot.shutdown()
             else:
-                embed = discord.Embed(
-                    title="Are you sure you want to shut down?", color=await ctx.embed_color()
-                )
-                view = ConfirmationView()
-                await view.start(ctx, embed=embed)
-                await view.wait()
-                if view.value:
-                    embed = discord.Embed(title="Shutting Down...", color=await ctx.embed_color())
-                    await view.message.edit(embed=embed)
-                    await self.bot.shutdown()
-                else:
-                    embed = discord.Embed(title="Cancelling...", color=await ctx.embed_color())
-                    await view.message.edit(embed=embed)
+                embed = discord.Embed(title="Cancelling...", color=await ctx.embed_color())
+                await view.message.edit(embed=embed)
 
     @commands.command(name="restart")
     @commands.is_owner()
@@ -2321,20 +2321,20 @@ class Core(commands.commands._RuleDropper, commands.Cog, CoreLogic):
                 embed = discord.Embed(title="Restarting...", color=await ctx.embed_color())
                 await ctx.send(embed=embed)
                 await self.bot.shutdown(restart=True)
+                return
+            embed = discord.Embed(
+                title="Are you sure you want to restart?", color=await ctx.embed_color()
+            )
+            view = ConfirmView(ctx.author, disable_buttons=True)
+            view.message = await ctx.send(embed=embed, view=view)
+            await view.wait()
+            if view.result:
+                embed = discord.Embed(title="Restarting...", color=await ctx.embed_color())
+                await view.message.edit(embed=embed)
+                await self.bot.shutdown(restart=True)
             else:
-                embed = discord.Embed(
-                    title="Are you sure you want to restart?", color=await ctx.embed_color()
-                )
-                view = ConfirmationView()
-                await view.start(ctx, embed=embed)
-                await view.wait()
-                if view.value:
-                    embed = discord.Embed(title="Restarting...", color=await ctx.embed_color())
-                    await view.message.edit(embed=embed)
-                    await self.bot.shutdown(restart=True)
-                else:
-                    embed = discord.Embed(title="Cancelling...", color=await ctx.embed_color())
-                    await view.message.edit(embed=embed)
+                embed = discord.Embed(title="Cancelling...", color=await ctx.embed_color())
+                await view.message.edit(embed=embed)
 
     @bank.is_owner_if_bank_global()
     @commands.guildowner_or_permissions(administrator=True)
@@ -3512,13 +3512,11 @@ class Core(commands.commands._RuleDropper, commands.Cog, CoreLogic):
         - `<service>` - The service you're adding tokens to.
         - `<tokens>` - Pairs of token keys and values. The key and value should be separated by one of ` `, `,`, or `;`.
         """
-        if service is None:  # Handled in order of missing operations
-            await ctx.send(_("Click the button below to set your keys."), view=SetApiView())
-        elif tokens is None:
-            await ctx.send(
-                _("Click the button below to set your keys."),
-                view=SetApiView(default_service=service),
-            )
+        if service is None or tokens is None:
+            view = SetApiView(default_service=service)
+            msg = await ctx.send(_("Click the button below to set your keys."), view=view)
+            await view.wait()
+            await msg.edit(content=_("This API keys setup message has expired."), view=None)
         else:
             if ctx.bot_permissions.manage_messages:
                 await ctx.message.delete()

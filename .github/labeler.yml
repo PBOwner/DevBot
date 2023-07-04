@@ -16,6 +16,8 @@
   - any:
       - redbot/cogs/audio/**/*
       - "!redbot/cogs/audio/**/locales/*"
+  # Tests
+  - tests/cogs/audio/**/*
 "Category: Cogs - Bank": []  # historical label for a removed cog
 "Category: Cogs - Cleanup":
   # Source
