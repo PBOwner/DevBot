@@ -426,11 +426,6 @@ class Dev(commands.Cog):
         """
         return
 
-    # Necessary until Zeph's RTFS cog stops implementing this
-    @staticmethod
-    def cleanup_code(content: str) -> str:
-        return cleanup_code(content)
-
     def get_environment(self, ctx: commands.Context) -> dict:
         env = {
             "bot": ctx.bot,
