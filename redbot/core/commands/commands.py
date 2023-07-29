@@ -461,19 +461,18 @@ class Command(CogCommandMixin, DPYCommand):
             if not change_permission_state:
                 ctx.permission_state = original_state
 
-    def is_enabled(self, ctx) -> bool:
+    def is_enabled(self, guild: Optional[discord.abc.Snowflake] = None) -> bool:
         if not self.enabled:
             return False
-        if ctx.guild:
-            if self._disabled_in.has(ctx.guild.id):
+        if guild is not None:
+            if self._disabled_in.has(guild.id):
                 return False
-
         return True
 
     async def prepare(self, ctx, /):
         ctx.command = self
 
-        cmd_enabled = self.is_enabled(ctx)
+        cmd_enabled = self.is_enabled(ctx.guild)
         if not cmd_enabled:
             raise DisabledCommand(f"{self.name} command is disabled")
 
@@ -530,7 +529,15 @@ class Command(CogCommandMixin, DPYCommand):
         return True
 
     def disable_in(self, guild: discord.Guild) -> bool:
-        """Disable this command in the given guild.
+        """
+        Disable this command in the given guild.
+
+        This is generally called by the settings managed with
+        the ``[p]command disable global/server`` commands.
+        Any changes made outside of that will not persist after cog
+        reload and may also be affected when either of those commands
+        is called on this command. It is not recommended to rely on
+        this method, if you want a consistent behavior.
 
         Parameters
         ----------
@@ -541,7 +548,6 @@ class Command(CogCommandMixin, DPYCommand):
         -------
         bool
             ``True`` if the command wasn't already disabled.
-
         """
         if self._disabled_in.has(guild.id):
             return False
@@ -552,6 +558,13 @@ class Command(CogCommandMixin, DPYCommand):
     def enable_in(self, guild: discord.Guild) -> bool:
         """Enable this command in the given guild.
 
+        This is generally called by the settings managed with
+        the ``[p]command disable global/server`` commands.
+        Any changes made outside of that will not persist after cog
+        reload and may also be affected when either of those commands
+        is called on this command. It is not recommended to rely on
+        this method, if you want a consistent behavior.
+
         Parameters
         ----------
         guild : discord.Guild
@@ -561,7 +574,6 @@ class Command(CogCommandMixin, DPYCommand):
         -------
         bool
             ``True`` if the command wasn't already enabled.
-
         """
         try:
             self._disabled_in.remove(guild.id)
