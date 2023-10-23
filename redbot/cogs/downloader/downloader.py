@@ -1190,6 +1190,7 @@ class Downloader(commands.Cog):
             ctx.assume_yes = True
         await self._cog_update_logic(ctx, cogs=cogs)
 
+    @commands.is_owner()
     @commands.command(name="updr", aliases=["cur"], hidden=True)
     async def _updr(self, ctx, *cogs: InstalledCog) -> None:
         """Update cogs and reload immediately.
