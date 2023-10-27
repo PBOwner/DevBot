@@ -522,7 +522,7 @@ class ConfirmView(discord.ui.View):
     async def on_timeout(self):
         """
         A callback that is called by the provided (default) callbacks for `confirm_button`
-        and `dismiss_button` as well as when a view’s timeout elapses without being
+        and `dismiss_button` as well as when a view's timeout elapses without being
         explicitly stopped.
 
         The default implementation will either disable the buttons
@@ -581,7 +581,7 @@ class ConfirmView(discord.ui.View):
         # call `on_timeout` explicitly here since it's not called when `stop()` is called.
         await self.on_timeout()
 
-    @discord.ui.button(label=_("No"), style=discord.ButtonStyle.secondary)
+    @discord.ui.button(label=_("No"), style=discord.ButtonStyle.red)
     async def dismiss_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         # Warning: The Sphinx documentation for this method/attribute does not use this docstring.
         """
