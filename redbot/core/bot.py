@@ -1678,13 +1678,6 @@ class Red(
             raise errors.PackageAlreadyLoaded(spec)
 
         lib = module_from_spec(spec)
-        sys.modules[name] = lib
-        try:
-            spec.loader.exec_module(lib)
-        except Exception:
-            del sys.modules[name]
-            raise
-
         if not hasattr(lib, "setup"):
             del lib
             raise discord.ClientException(f"Extension {name} does not have a setup function.")
@@ -1693,7 +1686,6 @@ class Red(
             await lib.setup(self)
             await self.tree.red_check_enabled()
         except Exception:
-            del sys.modules[name]
             await self._remove_module_references(lib.__name__)
             await self._call_module_finalizers(lib, name)
             raise
