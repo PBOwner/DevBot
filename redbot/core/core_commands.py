@@ -433,7 +433,7 @@ class Core(commands.commands._RuleDropper, commands.Cog, CoreLogic):
     @commands.hybrid_command(aliases=["info"])
     @commands.bot_has_permissions(embed_links=True)
     async def botinfo(self, ctx: commands.Context):
-        """Shows info about [botname]."""
+        """Shows info about me."""
         embed = discord.Embed(color=await ctx.embed_color())
         app_info = await self.bot.application_info()
         owner = f"Team {app_info.team.name}" if app_info.team else app_info.owner
@@ -442,10 +442,10 @@ class Core(commands.commands._RuleDropper, commands.Cog, CoreLogic):
         python = sys.version_info[:3]  # This will return a tuple of (major, minor, micro)
         python_url = "https://www.python.org/downloads/release/python-{}{}{}".format(*python)
         dpy_repo = "https://github.com/Rapptz/discord.py"
-        red_repo = "https://github.com/Shiro-DiscordBot/Red-DiscordBot"
+        bot_repo = "https://github.com/Shiro-DiscordBot/Red-DiscordBot"
         python_version = "[`{}.{}.{}`]({})".format(*python, python_url)
         dpy_version = "[`{}`]({})".format(discord.__version__, dpy_repo)
-        red_version = "[`{}`]({})".format(__version__, red_repo)
+        red_version = "[`{}`]({})".format(__version__, bot_repo)
         dot = str(self.bot.get_emoji(914352680627994634))
         embed.add_field(
             name="Versions",
@@ -457,24 +457,25 @@ class Core(commands.commands._RuleDropper, commands.Cog, CoreLogic):
             inline=False,
         )
 
+        bot_name = self.bot.user.name
         custom_info = await self.bot._config.custom_info()
         if custom_info:
             embed.add_field(
-                name="<:ShiroHeart:1220930308342288475> About Shiro",
+                name=f"<:ShiroHeart:1220930308342288475> About {bot_name}",
                 value=custom_info,
                 inline=False,
             )
 
         red_repo = "https://github.com/Cog-Creators/Red-DiscordBot"
-        contributors_url = red_repo + "/graphs/contributors"
-        author_repo = "https://github.com/Twentysix26"
+        contributors = red_repo + "/graphs/contributors"
+        twentysix = "https://github.com/Twentysix26"
         red_server = "https://discord.gg/red"
         about = (
-            "Shiro is a custom fork of [Red, an open source Discord Bot]({}) "
-            "created by [Twentysix]({}) and [improved by many]({}).\n\n"
+            f"{bot_name} is a custom fork of [Red, an open source Discord Bot]({red_repo}) "
+            f"created by [Twentysix]({twentysix}) and [improved by many]({contributors}).\n\n"
             "Red is backed by a passionate community who contributes and creates content for everyone to enjoy.\n"
-            "[Join us today]({}) and help us improve!\n\n(c) Cog Creators"
-        ).format(red_repo, author_repo, contributors_url, red_server)
+            f"[Join us today]({red_server}) and help us improve!\n\n(c) Cog Creators"
+        )
         embed.add_field(name="<:Red:917079459641831474> About Red", value=about, inline=False)
 
         public = await self.bot.is_invite_url_public()
@@ -482,11 +483,11 @@ class Core(commands.commands._RuleDropper, commands.Cog, CoreLogic):
         server_invite = await self.bot.get_support_server_url()
         links = ""
         if bot_invite:
-            links += "[Invite Shiro]({})".format(bot_invite)
+            links += f"[Invite {bot_name}]({bot_invite})"
         if bot_invite and server_invite:
             links += " | "
         if server_invite:
-            links += "[Support Server]({})".format(server_invite)
+            links += f"[Support Server]({server_invite})"
         if links != "":
             embed.add_field(name="<:Link:955273752940261376> Links", value=links, inline=False)
 
@@ -503,7 +504,7 @@ class Core(commands.commands._RuleDropper, commands.Cog, CoreLogic):
 
     @commands.hybrid_command()
     async def credits(self, ctx: commands.Context):
-        """Shows [botname]'s credits."""
+        """Shows my credits."""
         bot_name = self.bot.user.name
         org = "https://github.com/Cog-Creators"
         red_repo = org + "/Red-DiscordBot"
@@ -524,7 +525,7 @@ class Core(commands.commands._RuleDropper, commands.Cog, CoreLogic):
         embed.add_field(
             name="<:Red:917079459641831474> Red - Discord Bot",
             value=(
-                f"Shiro is a custom fork of [Red, an open source Discord Bot]({red_repo}) "
+                f"{bot_name} is a custom fork of [Red, an open source Discord Bot]({red_repo}) "
                 f"created by [Twentysix]({twentysix}) and [improved by many]({org}).\n\n"
                 f"Red is backed by a [passionate community]({red_server}) who contributes "
                 "and creates content for everyone to enjoy.\n\n(c) Cog Creators"
@@ -534,7 +535,7 @@ class Core(commands.commands._RuleDropper, commands.Cog, CoreLogic):
         embed.add_field(
             name="Hosting",
             value=(
-                f"Shiro is maintained by {str(kuro)} and hosted with help from {str(lamune)}.\n"
+                f"{bot_name} is maintained by {str(kuro)} and hosted with help from {str(lamune)}.\n"
                 "The host provider is Oracle."
             ),
             inline=False,
@@ -569,7 +570,7 @@ class Core(commands.commands._RuleDropper, commands.Cog, CoreLogic):
 
     @commands.hybrid_command()
     async def uptime(self, ctx: commands.Context):
-        """Shows [botname]'s uptime."""
+        """Shows my uptime."""
         delta = discord.utils.utcnow() - self.bot.uptime
         uptime = self.bot.uptime.replace(tzinfo=datetime.timezone.utc)
         uptime_str = humanize_timedelta(timedelta=delta) or _("Less than one second.")
