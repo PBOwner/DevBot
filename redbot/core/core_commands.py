@@ -437,9 +437,7 @@ class Core(commands.commands._RuleDropper, commands.Cog, CoreLogic):
         embed = discord.Embed(color=await ctx.embed_color())
         app_info = await self.bot.application_info()
         owner = f"Team {app_info.team.name}" if app_info.team else app_info.owner
-        embed.add_field(
-            name="Instance Owned by" if app_info.team else "Instance Owned by:", value=owner
-        )
+        embed.add_field(name="Instance Owned by", value=owner)
 
         python = sys.version_info[:3]  # This will return a tuple of (major, minor, micro)
         python_url = "https://www.python.org/downloads/release/python-{}{}{}".format(*python)
