@@ -413,7 +413,7 @@ class Core(commands.commands._RuleDropper, commands.Cog, CoreLogic):
             pings["Typing"] = f"{round((after - before) * 1000, 2)} ms"
             diff = (message.created_at - ctx.message.created_at).total_seconds()
             pings["Message"] = f"{round(diff * 1000, 2)} ms"
-            embed = discord.Embed(title="Pong!", color=ctx.embed_color)
+            embed = discord.Embed(title="Pong!", color=await ctx.embed_color())
             for name, value in pings.items():
                 embed.add_field(name=name, value=box(value, "py"))
             await message.edit(embed=embed)
@@ -430,14 +430,14 @@ class Core(commands.commands._RuleDropper, commands.Cog, CoreLogic):
             content += "\n\n\N{SMIRKING FACE} Nice typo!" if ctx.invoked_with != "ping" else ""
         await message.edit(content=content)
 
-    @commands.command(aliases=["info"])
+    @commands.hybrid_command(aliases=["info"])
     @commands.bot_has_permissions(embed_links=True)
     async def botinfo(self, ctx: commands.Context):
         """Shows info about [botname]."""
         embed = discord.Embed(color=await ctx.embed_color())
         app_info = await self.bot.application_info()
         owner = f"Team {app_info.team.name}" if app_info.team else app_info.owner
-        embed.add_field(name="Instance Owned by", value=owner)
+        embed.add_field(name="<:ShiroSleep:1220931264593395722> Instance Owned by", value=owner)
 
         python = sys.version_info[:3]  # This will return a tuple of (major, minor, micro)
         python_url = "https://www.python.org/downloads/release/python-{}{}{}".format(*python)
@@ -501,7 +501,7 @@ class Core(commands.commands._RuleDropper, commands.Cog, CoreLogic):
         view = InviteView(self.bot)
         await view.start(ctx, embed=embed)
 
-    @commands.command(cls=commands.commands._AlwaysAvailableCommand)
+    @commands.hybrid_command(cls=commands.commands._AlwaysAvailableCommand)
     async def credits(self, ctx: commands.Context):
         """Shows [botname]'s credits."""
         bot_name = self.bot.user.name
