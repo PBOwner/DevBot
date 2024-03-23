@@ -43,13 +43,16 @@ from .utils.predicates import MessagePredicate
 from .utils.chat_formatting import (
     bold,
     box,
+    error,
     humanize_list,
     humanize_number,
     humanize_timedelta,
     inline,
     pagify,
+    success,
     text_to_file,
     underline,
+    warning,
 )
 from .utils.views import ConfirmView, ContactDmView
 from .commands import CommandConverter, CogConverter
@@ -1559,84 +1562,106 @@ class Core(commands.commands._RuleDropper, commands.Cog, CoreLogic):
 
         if loaded := outcomes["loaded_packages"]:
             loaded_packages = humanize_list([inline(package) for package in loaded])
-            formed = _("Loaded {packs}.").format(packs=loaded_packages)
+            formed = success(_("Loaded {packs}.").format(packs=loaded_packages))
             output.append(formed)
 
         if already_loaded := outcomes["alreadyloaded_packages"]:
             if len(already_loaded) == 1:
-                formed = _("The following package is already loaded: {pack}").format(
-                    pack=inline(already_loaded[0])
+                formed = error(
+                    _("The following package is already loaded: {pack}").format(
+                        pack=inline(already_loaded[0])
+                    )
                 )
             else:
-                formed = _("The following packages are already loaded: {packs}").format(
-                    packs=humanize_list([inline(package) for package in already_loaded])
+                formed = error(
+                    _("The following packages are already loaded: {packs}").format(
+                        packs=humanize_list([inline(package) for package in already_loaded])
+                    )
                 )
             output.append(formed)
 
         if failed := outcomes["failed_packages"]:
             if len(failed) == 1:
-                formed = _(
-                    "Failed to load the following package: {pack}."
-                    "\nCheck your console or logs for details."
-                ).format(pack=inline(failed[0]))
+                formed = error(
+                    _(
+                        "Failed to load the following package: {pack}."
+                        "\nCheck your console or logs for details."
+                    ).format(pack=inline(failed[0]))
+                )
             else:
-                formed = _(
-                    "Failed to load the following packages: {packs}"
-                    "\nCheck your console or logs for details."
-                ).format(packs=humanize_list([inline(package) for package in failed]))
+                formed = error(
+                    _(
+                        "Failed to load the following packages: {packs}"
+                        "\nCheck your console or logs for details."
+                    ).format(packs=humanize_list([inline(package) for package in failed]))
+                )
             output.append(formed)
 
         if invalid_pkg_names := outcomes["invalid_pkg_names"]:
             if len(invalid_pkg_names) == 1:
-                formed = _(
-                    "The following name is not a valid package name: {pack}\n"
-                    "Package names cannot start with a number"
-                    " and can only contain ascii numbers, letters, and underscores."
-                ).format(pack=inline(invalid_pkg_names[0]))
+                formed = error(
+                    _(
+                        "The following name is not a valid package name: {pack}\n"
+                        "Package names cannot start with a number"
+                        " and can only contain ascii numbers, letters, and underscores."
+                    ).format(pack=inline(invalid_pkg_names[0]))
+                )
             else:
-                formed = _(
-                    "The following names are not valid package names: {packs}\n"
-                    "Package names cannot start with a number"
-                    " and can only contain ascii numbers, letters, and underscores."
-                ).format(packs=humanize_list([inline(package) for package in invalid_pkg_names]))
+                formed = error(
+                    _(
+                        "The following names are not valid package names: {packs}\n"
+                        "Package names cannot start with a number"
+                        " and can only contain ascii numbers, letters, and underscores."
+                    ).format(packs=humanize_list([inline(package) for package in invalid_pkg_names]))
+                )
             output.append(formed)
 
         if not_found := outcomes["notfound_packages"]:
             if len(not_found) == 1:
-                formed = _("The following package was not found in any cog path: {pack}.").format(
-                    pack=inline(not_found[0])
+                formed = error(
+                    _("The following package was not found in any cog path: {pack}.").format(
+                        pack=inline(not_found[0])
+                    )
                 )
             else:
-                formed = _(
-                    "The following packages were not found in any cog path: {packs}"
-                ).format(packs=humanize_list([inline(package) for package in not_found]))
+                formed = error(
+                    _(
+                        "The following packages were not found in any cog path: {packs}"
+                    ).format(packs=humanize_list([inline(package) for package in not_found]))
+                )
             output.append(formed)
 
         if failed_with_reason := outcomes["failed_with_reason_packages"]:
             reasons = "\n".join([f"`{x}`: {y}" for x, y in failed_with_reason.items()])
             if len(failed_with_reason) == 1:
-                formed = _(
-                    "This package could not be loaded for the following reason:\n\n{reason}"
-                ).format(reason=reasons)
+                formed = error(
+                    _(
+                        "This package could not be loaded for the following reason:\n\n{reason}"
+                    ).format(reason=reasons)
+                )
             else:
-                formed = _(
-                    "These packages could not be loaded for the following reasons:\n\n{reasons}"
-                ).format(reasons=reasons)
+                formed = error(
+                    _(
+                        "These packages could not be loaded for the following reasons:\n\n{reasons}"
+                    ).format(reasons=reasons)
+                )
             output.append(formed)
 
         if repos_with_shared_libs := outcomes["repos_with_shared_libs"]:
             if len(repos_with_shared_libs) == 1:
-                formed = _(
-                    "**WARNING**: The following repo is using shared libs"
-                    " which are marked for removal in the future: {repo}.\n"
-                    "You should inform maintainer of the repo about this message."
-                ).format(repo=inline(repos_with_shared_libs.pop()))
+                formed = warning(
+                    _(
+                        "The following repo is using shared libs which are marked for removal in the future: {repo}.\n"
+                        "You should inform maintainer of the repo about this message."
+                    ).format(repo=inline(repos_with_shared_libs.pop()))
+                )
             else:
-                formed = _(
-                    "**WARNING**: The following repos are using shared libs"
-                    " which are marked for removal in the future: {repos}.\n"
-                    "You should inform maintainers of these repos about this message."
-                ).format(repos=humanize_list([inline(repo) for repo in repos_with_shared_libs]))
+                formed = warning(
+                    _(
+                        "The following repos are using shared libs which are marked for removal in the future: {repos}.\n"
+                        "You should inform maintainers of these repos about this message."
+                    ).format(repos=humanize_list([inline(repo) for repo in repos_with_shared_libs]))
+                )
             output.append(formed)
 
         if output:
@@ -1669,23 +1694,31 @@ class Core(commands.commands._RuleDropper, commands.Cog, CoreLogic):
 
         if unloaded := outcomes["unloaded_packages"]:
             if len(unloaded) == 1:
-                formed = _("The following package was unloaded: {pack}.").format(
-                    pack=inline(unloaded[0])
+                formed = success(
+                    _("The following package was unloaded: {pack}.").format(
+                        pack=inline(unloaded[0])
+                    )
                 )
             else:
-                formed = _("The following packages were unloaded: {packs}.").format(
-                    packs=humanize_list([inline(package) for package in unloaded])
+                formed = success(
+                    _("The following packages were unloaded: {packs}.").format(
+                        packs=humanize_list([inline(package) for package in unloaded])
+                    )
                 )
             output.append(formed)
 
         if failed := outcomes["notloaded_packages"]:
             if len(failed) == 1:
-                formed = _("The following package was not loaded: {pack}.").format(
-                    pack=inline(failed[0])
+                formed = error(
+                    _("The following package was not loaded: {pack}.").format(
+                        pack=inline(failed[0])
+                    )
                 )
             else:
-                formed = _("The following packages were not loaded: {packs}.").format(
-                    packs=humanize_list([inline(package) for package in failed])
+                formed = error(
+                    _("The following packages were not loaded: {packs}.").format(
+                        packs=humanize_list([inline(package) for package in failed])
+                    )
                 )
             output.append(formed)
 
@@ -1718,73 +1751,91 @@ class Core(commands.commands._RuleDropper, commands.Cog, CoreLogic):
 
         if loaded := outcomes["loaded_packages"]:
             loaded_packages = humanize_list([inline(package) for package in loaded])
-            formed = _("Reloaded {packs}.").format(packs=loaded_packages)
+            formed = success(_("Reloaded {packs}.").format(packs=loaded_packages))
             output.append(formed)
 
         if failed := outcomes["failed_packages"]:
             if len(failed) == 1:
-                formed = _(
-                    "Failed to reload the following package: {pack}."
-                    "\nCheck your console or logs for details."
-                ).format(pack=inline(failed[0]))
+                formed = error(
+                    _(
+                        "Failed to reload the following package: {pack}."
+                        "\nCheck your console or logs for details."
+                    ).format(pack=inline(failed[0]))
+                )
             else:
-                formed = _(
-                    "Failed to reload the following packages: {packs}"
-                    "\nCheck your console or logs for details."
-                ).format(packs=humanize_list([inline(package) for package in failed]))
+                formed = error(
+                    _(
+                        "Failed to reload the following packages: {packs}"
+                        "\nCheck your console or logs for details."
+                    ).format(packs=humanize_list([inline(package) for package in failed]))
+                )
             output.append(formed)
 
         if invalid_pkg_names := outcomes["invalid_pkg_names"]:
             if len(invalid_pkg_names) == 1:
-                formed = _(
-                    "The following name is not a valid package name: {pack}\n"
-                    "Package names cannot start with a number"
-                    " and can only contain ascii numbers, letters, and underscores."
-                ).format(pack=inline(invalid_pkg_names[0]))
+                formed = error(
+                    _(
+                        "The following name is not a valid package name: {pack}\n"
+                        "Package names cannot start with a number"
+                        " and can only contain ascii numbers, letters, and underscores."
+                    ).format(pack=inline(invalid_pkg_names[0]))
+                )
             else:
-                formed = _(
-                    "The following names are not valid package names: {packs}\n"
-                    "Package names cannot start with a number"
-                    " and can only contain ascii numbers, letters, and underscores."
-                ).format(packs=humanize_list([inline(package) for package in invalid_pkg_names]))
+                formed = error(
+                    _(
+                        "The following names are not valid package names: {packs}\n"
+                        "Package names cannot start with a number"
+                        " and can only contain ascii numbers, letters, and underscores."
+                    ).format(packs=humanize_list([inline(package) for package in invalid_pkg_names]))
+                )
             output.append(formed)
 
         if not_found := outcomes["notfound_packages"]:
             if len(not_found) == 1:
-                formed = _("The following package was not found in any cog path: {pack}.").format(
-                    pack=inline(not_found[0])
+                formed = error(
+                    _("The following package was not found in any cog path: {pack}.").format(
+                        pack=inline(not_found[0])
+                    )
                 )
             else:
-                formed = _(
-                    "The following packages were not found in any cog path: {packs}"
-                ).format(packs=humanize_list([inline(package) for package in not_found]))
+                formed = error(
+                    _(
+                        "The following packages were not found in any cog path: {packs}"
+                    ).format(packs=humanize_list([inline(package) for package in not_found]))
+                )
             output.append(formed)
 
         if failed_with_reason := outcomes["failed_with_reason_packages"]:
             reasons = "\n".join([f"`{x}`: {y}" for x, y in failed_with_reason.items()])
             if len(failed_with_reason) == 1:
-                formed = _(
-                    "This package could not be reloaded for the following reason:\n\n{reason}"
-                ).format(reason=reasons)
+                formed = error(
+                    _(
+                        "This package could not be reloaded for the following reason:\n\n{reason}"
+                    ).format(reason=reasons)
+                )
             else:
-                formed = _(
-                    "These packages could not be reloaded for the following reasons:\n\n{reasons}"
-                ).format(reasons=reasons)
+                formed = error(
+                    _(
+                        "These packages could not be reloaded for the following reasons:\n\n{reasons}"
+                    ).format(reasons=reasons)
+                )
             output.append(formed)
 
         if repos_with_shared_libs := outcomes["repos_with_shared_libs"]:
             if len(repos_with_shared_libs) == 1:
-                formed = _(
-                    "**WARNING**: The following repo is using shared libs"
-                    " which are marked for removal in the future: {repo}.\n"
-                    "You should inform maintainers of these repos about this message."
-                ).format(repo=inline(repos_with_shared_libs.pop()))
+                formed = warning(
+                    _(
+                        "The following repo is using shared libs which are marked for removal in the future: {repo}.\n"
+                        "You should inform maintainers of these repos about this message."
+                    ).format(repo=inline(repos_with_shared_libs.pop()))
+                )
             else:
-                formed = _(
-                    "**WARNING**: The following repos are using shared libs"
-                    " which are marked for removal in the future: {repos}.\n"
-                    "You should inform maintainers of these repos about this message."
-                ).format(repos=humanize_list([inline(repo) for repo in repos_with_shared_libs]))
+                formed = warning(
+                    _(
+                        "The following repos are using shared libs which are marked for removal in the future: {repos}.\n"
+                        "You should inform maintainers of these repos about this message."
+                    ).format(repos=humanize_list([inline(repo) for repo in repos_with_shared_libs]))
+                )
             output.append(formed)
 
         if output:

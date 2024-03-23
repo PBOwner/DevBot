@@ -499,20 +499,15 @@ class Downloader(commands.Cog):
         res = await self.bot.loop.run_in_executor(ThreadPoolExecutor(max_workers=1), exe)
         return res
 
-    @commands.group()
     @commands.is_owner()
-    async def pip(self, ctx: commands.Context) -> None:
-        """Install/Uninstall a group of dependencies using pip."""
-        pass
-
-    @pip.command(name="install")
-    async def pip_install(self, ctx: commands.Context, *deps: str) -> None:
+    @commands.command()
+    async def pipinstall(self, ctx: commands.Context, *deps: str) -> None:
         """
         Install a group of dependencies using pip.
 
         Examples:
-        - `[p]pip install bs4`
-        - `[p]pip install py-cpuinfo psutil`
+        - `[p]pipinstall bs4`
+        - `[p]pipinstall py-cpuinfo psutil`
 
         Improper usage of this command can break your bot, be careful.
 
@@ -536,7 +531,7 @@ class Downloader(commands.Cog):
                     "The library failed to install. Please check your logs for a complete list."
                 )
             )
-            await ctx.send(warning(msg))
+            await ctx.send(error(msg))
 
     def github_view(self, label: str, url: str) -> View:
         """Generate a Link Button with a GitHub Emoji with provided label and URL."""
@@ -607,7 +602,7 @@ class Downloader(commands.Cog):
                 "Something went wrong during the cloning process."
                 " See logs for more information."
             )
-            await ctx.send(warning(msg))
+            await ctx.send(error(msg))
             log.exception(
                 "Something went wrong whilst cloning %s (to revision: %s)",
                 repo_url,
@@ -621,7 +616,7 @@ class Downloader(commands.Cog):
                 name,
             )
             msg = _("Something went wrong trying to add that repo. See logs for more information.")
-            await ctx.send(warning(msg))
+            await ctx.send(error(msg))
         else:
             msg = _("Repo `{name}` successfully added.").format(name=name)
             await ctx.send(success(msg))
@@ -779,7 +774,7 @@ class Downloader(commands.Cog):
                 all_failed_libs += failed_libs
         message = ""
         if failed_reqs:
-            message += warning(
+            message += error(
                 _("Failed to install requirements: ")
                 if len(failed_reqs) > 1
                 else _("Failed to install the requirement: ")
@@ -788,7 +783,7 @@ class Downloader(commands.Cog):
             libnames = [lib.name for lib in failed_libs]
             message += (
                 "\n"
-                + warning(
+                + error(
                     _("Failed to install shared libraries: ")
                     if len(all_failed_libs) > 1
                     else _("Failed to install shared library: ")
@@ -867,13 +862,13 @@ class Downloader(commands.Cog):
                             f"**{candidate.object_type} {candidate.rev}**"
                             f" - {candidate.description}\n"
                         )
-                    await self.send_pagified(ctx, warning(msg))
+                    await self.send_pagified(ctx, error(msg))
                     return
                 except errors.UnknownRevision:
                     msg = _("Error: there is no revision `{rev}` in repo `{repo.name}`").format(
                         rev=rev, repo=repo
                     )
-                    return await ctx.send(warning(msg))
+                    return await ctx.send(error(msg))
             cog_names = set(cog_names)
 
             async with repo.checkout(commit, exit_to_rev=repo.branch):
@@ -885,7 +880,7 @@ class Downloader(commands.Cog):
                 if failed_reqs:
                     message += (
                         "\n"
-                        + warning(
+                        + error(
                             _("Failed to install requirements: ")
                             if len(failed_reqs) > 1
                             else _("Failed to install the requirement: ")
@@ -909,7 +904,7 @@ class Downloader(commands.Cog):
             await self._save_to_installed(installed_cogs + installed_libs)
             if failed_libs:
                 libnames = [inline(lib.name) for lib in failed_libs]
-                message = "\n" + warning(
+                message = "\n" + error(
                     (
                         _("Failed to install shared libraries for `{repo.name}` repo: ")
                         if len(libnames) > 1
@@ -920,7 +915,7 @@ class Downloader(commands.Cog):
                 )
             if failed_cogs:
                 cognames = [inline(cog.name) for cog in failed_cogs]
-                message = "\n" + warning(
+                message = "\n" + error(
                     (
                         _("Failed to install cogs: ")
                         if len(failed_cogs) > 1
@@ -1305,13 +1300,13 @@ class Downloader(commands.Cog):
                             f"**{candidate.object_type} {candidate.rev}**"
                             f" - {candidate.description}\n"
                         )
-                    await self.send_pagified(ctx, warning(msg))
+                    await self.send_pagified(ctx, error(msg))
                     return
                 except errors.UnknownRevision:
                     message = _(
                         "Error: there is no revision `{rev}` in repo `{repo.name}`"
                     ).format(rev=rev, repo=repo)
-                    await ctx.send(warning(message))
+                    await ctx.send(error(message))
                     return
 
                 await repo.checkout(commit)
@@ -1608,7 +1603,7 @@ class Downloader(commands.Cog):
         if outdated_python_version:
             message += (
                 "\n"
-                + warning(
+                + error(
                     _("These cogs require higher python version than you have: ")
                     if len(outdated_python_version)
                     else _("This cog requires higher python version than you have: ")
@@ -1618,7 +1613,7 @@ class Downloader(commands.Cog):
         if outdated_bot_version:
             message += (
                 "\n"
-                + warning(
+                + error(
                     _(
                         "These cogs require different Red version"
                         " than you currently have ({current_version}): "
@@ -1698,7 +1693,7 @@ class Downloader(commands.Cog):
         installed_cogs, failed_cogs = await self._install_cogs(cogs_to_update)
         installed_libs, failed_libs = await self._reinstall_libraries(libs_to_update)
         await self._save_to_installed(installed_cogs + installed_libs)
-        message = success(_("Cog update completed successfully."))
+        message = _("Cog update completed successfully.")
 
         updated_cognames: Set[str] = set()
         if installed_cogs:
@@ -1749,7 +1744,7 @@ class Downloader(commands.Cog):
             cognames = [cog.name for cog in failed_cogs]
             message += (
                 "\n"
-                + warning(
+                + error(
                     _("Failed to update cogs: ")
                     if len(failed_cogs) > 1
                     else _("Failed to update cog: ")
@@ -1786,7 +1781,7 @@ class Downloader(commands.Cog):
             libnames = [lib.name for lib in failed_libs]
             message += (
                 "\n"
-                + warning(
+                + error(
                     _("Failed to install shared libraries: ")
                     if len(failed_cogs) > 1
                     else _("Failed to install shared library: ")
@@ -1995,7 +1990,7 @@ class Downloader(commands.Cog):
             formatted message
         """
 
-        message = warning(
+        message = error(
             _("Failed to update the following repositories:")
             if len(failed) > 1
             else _("Failed to update the following repository:")
