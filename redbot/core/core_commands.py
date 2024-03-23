@@ -460,7 +460,9 @@ class Core(commands.commands._RuleDropper, commands.Cog, CoreLogic):
         custom_info = await self.bot._config.custom_info()
         if custom_info:
             embed.add_field(
-                name="About Shiro", value=custom_info, inline=False
+                name="<:ShiroHeart:1220930308342288475> About Shiro",
+                value=custom_info,
+                inline=False,
             )
 
         red_repo = "https://github.com/Cog-Creators/Red-DiscordBot"
