@@ -456,6 +456,7 @@ class Core(commands.commands._RuleDropper, commands.Cog, CoreLogic):
                 f"<:discordpy:917079482148458557> {dpy_version}{dot}"
                 f"<:Red:917079459641831474> {red_version}"
             ),
+            inline=False,
         )
 
         custom_info = await self.bot._config.custom_info()
