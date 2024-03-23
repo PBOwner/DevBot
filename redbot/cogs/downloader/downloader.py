@@ -590,6 +590,18 @@ class Downloader(commands.Cog):
         except errors.ExistingGitRepo:
             msg = _("The repo name you provided is already in use. Please choose another name.")
             await ctx.send(error(msg))
+        except errors.AuthenticationError as err:
+            msg = _(
+                "Failed to authenticate or repository does not exist."
+                " See logs for more information."
+            )
+            await ctx.send(error(msg))
+            log.exception(
+                "Something went wrong whilst cloning %s (to revision: %s)",
+                repo_url,
+                branch,
+                exc_info=err,
+            )
         except errors.CloningError as err:
             msg = _(
                 "Something went wrong during the cloning process."
@@ -1890,7 +1902,7 @@ class Downloader(commands.Cog):
             cog_pkg_name = cog_installable.name
         elif cog.__module__.startswith("redbot."):  # Core commands or core cog
             made_by = "Cog Creators"
-            repo_url = "https://github.com/Kiki-DiscordBot/Red-DiscordBot"
+            repo_url = "https://github.com/Shiro-DiscordBot/Red-DiscordBot"
             module_fragments = cog.__module__.split(".")
             if module_fragments[1] == "core":
                 cog_pkg_name = "N/A - Built-in Commands"

@@ -48,7 +48,7 @@ PROFILE_EMOJIS = {
 
 # FORMAT: {server_id: {role_id: [emoji_id, title]}}
 SPECIAL_BADGES = {
-    825535079719501824: {  # Kiki✨'s Support (ʚ﹕The Cloud House﹕ɞ)
+    825535079719501824: {  # Shiro's Support Server
         954373039972298752: [954383743865470986, "Bot Developer"],
         833755355711930378: [915138297355968574, "Support Staff"],
         954374737700737075: [954383608532049960, "Bug Hunter"],
@@ -183,14 +183,12 @@ class ModInfo(MixinMeta):
         status_emoji = None
         status_string = None
         roles = None
-        name = str(user)
+        name = f"{user.display_name} \N{BULLET} {user}"
         color = await ctx.embed_color()
         member_number = None
         voice_state = None
         shared_guilds = None
         joined_on = None
-        since_joined = None
-        user_joined = None
 
         if guild and isinstance(user, discord.Member):
             status = "offline"
@@ -203,23 +201,19 @@ class ModInfo(MixinMeta):
             elif user.status == discord.Status.dnd:
                 status = "mobile_dnd" if user.is_on_mobile() else "dnd"
             status_emoji = ctx.bot.get_emoji(STATUS_EMOJIS[status])
-
             status_string = self.get_status_string(user)
+
             roles = user.roles[-1:0:-1]
-            joined_on = "{}\n({} days ago)".format(user_joined, since_joined)
-            name = f"{name}\n{user.nick}" if user.nick else name
+            if user.bot:
+                name = user.name
             color = user.color
             member_number = sorted(guild.members, key=lambda m: m.joined_at).index(user) + 1
             voice_state = user.voice
-            if user == guild.me:
-                shared_guilds = len(ctx.bot.guilds)
-            else:
-                shared_guilds = len(user.mutual_guilds)
-
+            shared_guilds = len(ctx.bot.guilds) if user == guild.me else len(user.mutual_guilds)
+            joined_on = "Unknown"
             if user.joined_at:
                 joined_on = "<t:{0}>\n(<t:{0}:R>)".format(int(user.joined_at.timestamp()))
-            else:
-                joined_on = "Unknown"
+
         title = unmarkdown(name) + " "
         if status_emoji:
             title = f"{status_emoji} {unmarkdown(name)} "
@@ -327,8 +321,8 @@ class ModInfo(MixinMeta):
                             role = roles[r.id]
                             special_badges.append(f"{ctx.bot.get_emoji(role[0])} {role[1]}")
             if (g := ctx.bot.get_guild(825535079719501824)) and g.get_member(user.id):
-                e = ctx.bot.get_emoji(915569880160436264)
-                special_badges.append(f"{e} [The Cloud House](https://discord.gg/Zef3pD8Yt5)")
+                e = ctx.bot.get_emoji(1220930308342288475)
+                special_badges.append(f"{e} [Shiro's Home](https://discord.gg/Zef3pD8Yt5)")
 
         if special_badges:
             name = (

@@ -50,7 +50,7 @@ class RPSParser:
             self.choice = None
 
 
-MAX_ROLL: Final[int] = 2**64 - 1
+MAX_ROLL: Final[int] = 2**63 - 1
 
 
 @cog_i18n(_)
@@ -265,7 +265,7 @@ class General(commands.Cog):
     async def lmgtfy(self, ctx, *, search_terms: str):
         """Create a lmgtfy link."""
         search_terms = escape(urllib.parse.quote_plus(search_terms), mass_mentions=True)
-        await ctx.send("https://lmgtfy.app/?q={}".format(search_terms))
+        await ctx.send("http://letmegooglethat.com/?q={}".format(search_terms))
 
     @commands.command()
     @commands.guild_only()

@@ -151,7 +151,7 @@ def init_events(bot, cli_flags):
         if bot._uptime is not None:
             return
 
-        bot._uptime = datetime.utcnow()
+        bot._uptime = discord.utils.utcnow()
 
         guilds = len(bot.guilds)
         users = len(set([m for m in bot.get_all_members()]))
@@ -433,7 +433,7 @@ def init_events(bot, cli_flags):
                             style=discord.ButtonStyle.link,
                             label="Support Server",
                             url=server_invite,
-                            emoji=ctx.bot.get_emoji(915569880160436264),
+                            emoji=ctx.bot.get_emoji(1220931046871273604),
                         )
                     )
             try:

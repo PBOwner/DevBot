@@ -153,6 +153,7 @@ class SimpleMenu(discord.ui.View):
         use_select_only: bool = False,
     ) -> None:
         super().__init__(timeout=timeout)
+        self._fallback_author_to_ctx = True
         self.author: Optional[discord.abc.User] = None
         self.message: Optional[discord.Message] = None
         self._source = _SimplePageSource(items=pages)
@@ -210,6 +211,19 @@ class SimpleMenu(discord.ui.View):
     def source(self):
         return self._source
 
+    @property
+    def author(self) -> Optional[discord.abc.User]:
+        if self._author is not None:
+            return self._author
+        if self._fallback_author_to_ctx:
+            return getattr(self.ctx, "author", None)
+        return None
+
+    @author.setter
+    def author(self, value: Optional[discord.abc.User]) -> None:
+        self._fallback_author_to_ctx = False
+        self._author = value
+
     async def on_timeout(self):
         try:
             if self.delete_after_timeout and not self.message.flags.ephemeral:
@@ -243,21 +257,54 @@ class SimpleMenu(discord.ui.View):
             options = self.select_options[:25]
         return _SelectMenu(options)
 
-    async def start(self, ctx: commands.Context, *, ephemeral: bool = False):
+    async def start(
+        self,
+        ctx: commands.Context,
+        *,
+        user: Optional[discord.abc.User] = None,
+        ephemeral: bool = False,
+    ):
         """
         Used to start the menu displaying the first page requested.
+
+        .. warning::
+            The ``user`` parameter is considered `provisional <developer-guarantees-exclusions>`.
+            If no issues arise, we plan on including it under developer guarantees
+            in the first release made after 2024-05-18.
+
         Parameters
         ----------
             ctx: `commands.Context`
                 The context to start the menu in.
+            user: discord.User
+                The user allowed to interact with the menu.
+                If this is ``None``, ``ctx.author`` will be able to interact with the menu.
+                .. warning::
+                    This parameter is `provisional <developer-guarantees-exclusions>`.
+                    If no issues arise, we plan on including it under developer guarantees
+                    in the first release made after 2024-05-18.
             ephemeral: `bool`
                 Send the message ephemerally. This only works
                 if the context is from a slash command interaction.
         """
-        self.author = ctx.author
+        self._fallback_author_to_ctx = True
+        if user is not None:
+            self.author = user
         self.ctx = ctx
         kwargs = await self.get_page(self.current_page)
         self.message = await ctx.send(**kwargs, ephemeral=ephemeral)
+
+    async def start_dm(self, user: discord.User):
+        """
+        Used to start displaying the menu in a direct message.
+        Parameters
+        ----------
+            user: `discord.User`
+                The user that will be direct messaged by the bot.
+        """
+        self.author = user
+        kwargs = await self.get_page(self.current_page)
+        self.message = await user.send(**kwargs)
 
     async def get_page(self, page_num: int) -> Dict[str, Optional[Any]]:
         try:
@@ -742,9 +789,9 @@ class InviteView(discord.ui.View):
             self.add_item(
                 discord.ui.Button(
                     style=discord.ButtonStyle.link,
-                    label="Invite Kiki✨",
+                    label=f"Invite {self.bot.user.name}",
                     url=bot_invite,
-                    emoji=self.bot.get_emoji(922371688635707412),
+                    emoji=self.bot.get_emoji(1220931219169087508),
                 )
             )
         if server_invite:
@@ -753,7 +800,7 @@ class InviteView(discord.ui.View):
                     style=discord.ButtonStyle.link,
                     label="Support Server",
                     url=server_invite,
-                    emoji=self.bot.get_emoji(915569880160436264),
+                    emoji=self.bot.get_emoji(1220931046871273604),
                 )
             )
 

@@ -132,7 +132,7 @@ class Red(
             help__tagline="",
             help__use_tick=False,
             help__react_timeout=30,
-            description="Kiki\✨ V2",
+            description="Shiro Discord Bot",
             invite_public=False,
             invite_perm=0,
             invite_commands_scope=False,
@@ -255,7 +255,7 @@ class Red(
         Set's Red's help formatter.
 
         .. warning::
-            This method is provisional.
+            This method is `provisional <developer-guarantees-exclusions>`.
 
 
         The formatter must implement all methods in
@@ -296,7 +296,7 @@ class Red(
         Resets Red's help formatter.
 
         .. warning::
-            This method is provisional.
+            This method is `provisional <developer-guarantees-exclusions>`.
 
 
         This exists for use in ``cog_unload`` for cogs which replace the formatter

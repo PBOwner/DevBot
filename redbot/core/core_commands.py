@@ -104,6 +104,7 @@ _ = i18n.Translator("Core", __file__)
 TokenConverter = commands.get_dict_converter(delims=[" ", ",", ";"])
 
 MAX_PREFIX_LENGTH = 25
+MINIMUM_PREFIX_LENGTH = 1
 
 
 class CoreLogic:
@@ -385,7 +386,7 @@ class Core(commands.commands._RuleDropper, commands.Cog, CoreLogic):
         return
 
     # Thanks Fixator
-    @commands.hybrid_command(aliases=["oing", "ling", "ipng", "pnig", "pign", "pinf", "ipgn"])
+    @commands.hybrid_command(aliases=["oing", "ling", "ipng", "pnig", "pign"])
     @commands.max_concurrency(1, commands.BucketType.guild)
     async def ping(self, ctx: commands.Context, show_shards: bool = False):
         """Shows my ping/latency.
@@ -397,96 +398,59 @@ class Core(commands.commands._RuleDropper, commands.Cog, CoreLogic):
         Typing: Time that bot taken to send message with ping.
         """
         show_shards = len(self.bot.latencies) > 1 and show_shards
-        pings = {"Discord WS": round(self.bot.latency * 1000, 2)}
+        pings = {"Discord WS": "", "Typing": "", "Message": ""}
+        if not show_shards:
+            pings["Discord WS"] = f"{round(self.bot.latency * 1000, 2)} ms"
+        else:
+            pings["Discord WS"] = "\n".join(
+                [f"Shard {shard + 1}: {ping} ms" for shard, ping in self.bot.latencies]
+            )
         if await ctx.embed_requested():
             embed = discord.Embed(title="Pinging...", color=discord.Color.red())
-            for name, value in pings.items():
-                embed.add_field(name=name, value=box(f"{value} ms", "py"))
-            if ctx.invoked_with != "ping":
-                embed.set_footer(text="\N{SMIRKING FACE} Nice typo!")  # Inspired by Vexed :p
             before = time.monotonic()
-            message = await ctx.send(embed=embed)
-            embed.clear_fields()
-            embed.title = "<a:Kiki:922371688635707412> Pong!"
-            embed.color = await ctx.embed_color()
-            pings["Message"] = round(
-                (
-                    message.created_at - (ctx.message.edited_at or ctx.message.created_at)
-                ).total_seconds()
-                * 1000,
-                2,
-            )
-            pings["Typing"] = round((time.monotonic() - before) * 1000, 2)
+            message = await ctx.reply(embed=embed)
+            after = time.monotonic()
+            pings["Typing"] = f"{round((after - before) * 1000, 2)} ms"
+            diff = (message.created_at - ctx.message.created_at).total_seconds()
+            pings["Message"] = f"{round(diff * 1000, 2)} ms"
+            embed = discord.Embed(title="Pong!", color=ctx.embed_color)
             for name, value in pings.items():
-                embed.add_field(name=name, value=box(f"{value} ms", "py"))
-            if show_shards:
-                embed.add_field(
-                    name="Shards",
-                    value=box(
-                        "\n".join(
-                            [
-                                "Shard {}/{}: {} ms".format(
-                                    shard + 1, self.bot.shard_count, round(ping * 1000)
-                                )
-                                for shard, ping in self.bot.latencies
-                            ]
-                        ),
-                        "python",
-                    ),
-                )
+                embed.add_field(name=name, value=box(value, "py"))
             await message.edit(embed=embed)
-        else:
-            table = tabulate(pings.items())
-            if show_shards:
-                shards = tabulate(
-                    [
-                        (
-                            "Shard {}/{}".format(shard + 1, self.bot.shard_count),
-                            f"{round(ping * 1000, 2)} ms",
-                        )
-                        for shard, ping in self.bot.latencies
-                    ]
-                )
-                table += f"\n{shards}"
-            typo = "\N{SMIRKING FACE} Nice typo!" if ctx.invoked_with != "ping" else ""
-            before = time.monotonic()
-            message = await ctx.send(typo + box(table, "py"))
-            pings["Message"] = round(
-                (
-                    message.created_at - (ctx.message.edited_at or ctx.message.created_at)
-                ).total_seconds()
-                * 1000,
-                2,
-            )
-            pings["Typing"] = round((time.monotonic() - before) * 1000, 2)
-            for key, value in pings.items():
-                pings[key] = f"{value} ms"
-            table = tabulate(pings.items())
-            if show_shards:
-                table += f"\n{shards}"
-            await message.edit(content=typo + box(table, "py"))
+            return
+        before = time.monotonic()
+        message = await ctx.send("Pinging...")
+        after = time.monotonic()
+        pings["Typing"] = f"{round((after - before) * 1000, 2)} ms"
+        diff = (message.created_at - ctx.message.created_at).total_seconds()
+        pings["Message"] = f"{round(diff * 1000, 2)} ms"
+        table = tabulate(pings.items())
+        content = "Pong!\n\n" + box(table, "py")
+        if ctx.invoked_with != "ping":
+            content += "\n\n\N{SMIRKING FACE} Nice typo!" if ctx.invoked_with != "ping" else ""
+        await message.edit(content=content)
 
     @commands.command(aliases=["info"])
     @commands.bot_has_permissions(embed_links=True)
     async def botinfo(self, ctx: commands.Context):
         """Shows info about [botname]."""
         embed = discord.Embed(color=await ctx.embed_color())
-        # app_info = await self.bot.application_info()
-        # embed.add_field(
-        #     name="Instance Owned by Team:" if app_info.team else "Instance Owned by:",
-        #     value=app_info.team if app_info.team else str(owner),
-        # )
+        app_info = await self.bot.application_info()
+        owner = f"Team {app_info.team.name}" if app_info.team else app_info.owner
+        embed.add_field(
+            name="Instance Owned by" if app_info.team else "Instance Owned by:", value=owner
+        )
 
         python = sys.version_info[:3]  # This will return a tuple of (major, minor, micro)
         python_url = "https://www.python.org/downloads/release/python-{}{}{}".format(*python)
         dpy_repo = "https://github.com/Rapptz/discord.py"
-        red_repo = "https://github.com/Kiki-DiscordBot/Red-DiscordBot"
+        red_repo = "https://github.com/Shiro-DiscordBot/Red-DiscordBot"
         python_version = "[`{}.{}.{}`]({})".format(*python, python_url)
         dpy_version = "[`{}`]({})".format(discord.__version__, dpy_repo)
         red_version = "[`{}`]({})".format(__version__, red_repo)
         dot = str(self.bot.get_emoji(914352680627994634))
         embed.add_field(
-            name="<:Kiki:920617449127309322> Versions",
+            name="Versions",
             value=(
                 f"<:Python:917079498636279868> {python_version}{dot}"
                 f"<:discordpy:917079482148458557> {dpy_version}{dot}"
@@ -497,7 +461,7 @@ class Core(commands.commands._RuleDropper, commands.Cog, CoreLogic):
         custom_info = await self.bot._config.custom_info()
         if custom_info:
             embed.add_field(
-                name="<:Kiki:920617449127309322> About Kiki\✨", value=custom_info, inline=False
+                name="About Shiro", value=custom_info, inline=False
             )
 
         red_repo = "https://github.com/Cog-Creators/Red-DiscordBot"
@@ -505,20 +469,19 @@ class Core(commands.commands._RuleDropper, commands.Cog, CoreLogic):
         author_repo = "https://github.com/Twentysix26"
         red_server = "https://discord.gg/red"
         about = (
-            "Kiki\✨ is a custom fork of [Red, an open source Discord Bot]({}) "
+            "Shiro is a custom fork of [Red, an open source Discord Bot]({}) "
             "created by [Twentysix]({}) and [improved by many]({}).\n\n"
             "Red is backed by a passionate community who contributes and creates content for everyone to enjoy.\n"
             "[Join us today]({}) and help us improve!\n\n(c) Cog Creators"
         ).format(red_repo, author_repo, contributors_url, red_server)
         embed.add_field(name="<:Red:917079459641831474> About Red", value=about, inline=False)
 
-        bot_invite = (
-            await self.bot.get_invite_url() if await self.bot.is_invite_url_public() else None
-        )
+        public = await self.bot.is_invite_url_public()
+        bot_invite = await self.bot.get_invite_url() if public else None
         server_invite = await self.bot.get_support_server_url()
         links = ""
         if bot_invite:
-            links += "[Invite Kiki\✨]({})".format(bot_invite)
+            links += "[Invite Shiro]({})".format(bot_invite)
         if bot_invite and server_invite:
             links += " | "
         if server_invite:
@@ -526,21 +489,21 @@ class Core(commands.commands._RuleDropper, commands.Cog, CoreLogic):
         if links != "":
             embed.add_field(name="<:Link:955273752940261376> Links", value=links, inline=False)
 
-        embed.set_image(url="https://i.ibb.co/Gt73SGQ/kiki.jpg")
-
-        since = datetime.datetime(2021, 9, 12, 9, 44)  # 12 Sep 2021, 09:44
-        days_since = (datetime.datetime.utcnow() - since).days
-        embed.set_footer(
-            text="Bringing Joy since 12th September 2021 (over {} days ago!)".format(days_since),
-            icon_url="https://i.ibb.co/DDFddpF/kiki.png",
+        embed.set_image(
+            url="https://i.pinimg.com/originals/62/29/9a/62299afcedd465b631f9baa9786bd83b.gif"
         )
+
+        since = self.bot.user.created_at
+        days_since = (discord.utils.utcnow() - since).days
+        embed.set_footer(text=f"Bringing Joy since {days_since} days ago!")
+        embed.timestamp = since
         view = InviteView(self.bot)
         await view.start(ctx, embed=embed)
 
     @commands.command(cls=commands.commands._AlwaysAvailableCommand)
     async def credits(self, ctx: commands.Context):
         """Shows [botname]'s credits."""
-        bot_name = self.bot.user.display_name
+        bot_name = self.bot.user.name
         org = "https://github.com/Cog-Creators"
         red_repo = org + "/Red-DiscordBot"
         twentysix = "https://github.com/Twentysix26"
@@ -550,33 +513,28 @@ class Core(commands.commands._RuleDropper, commands.Cog, CoreLogic):
 
         embeds = []
         embed = discord.Embed(
+            color=await ctx.embed_color(),
             title=f"{bot_name}'s Credits",
             description=f"Credits for all people and services that helps {bot_name} exist.",
-            timestamp=ctx.me.created_at,
-            color=await ctx.embed_color(),
+            timestamp=self.bot.user.created_at,
         )
-        embed.set_footer(
-            text="{} exists since".format(bot_name),
-            icon_url="https://cdn.discordapp.com/attachments/908719687397953606/921065568365322280/kiki_round.png",
-        )
-        embed.set_thumbnail(
-            url="https://cdn.discordapp.com/attachments/908719687397953606/921065568365322280/kiki_round.png"
-        )
+        embed.set_thumbnail(url=self.bot.user.avatar.url)
+        embed.set_footer(text=f"{bot_name} exists since")
         embed.add_field(
             name="<:Red:917079459641831474> Red - Discord Bot",
             value=(
-                "Kiki\✨ is a custom fork of [Red, an open source Discord Bot]({}) "
-                "created by [Twentysix]({}) and [improved by many]({}).\n\n"
-                "Red is backed by a [passionate community]({}) who contributes "
+                f"Shiro is a custom fork of [Red, an open source Discord Bot]({red_repo}) "
+                f"created by [Twentysix]({twentysix}) and [improved by many]({org}).\n\n"
+                f"Red is backed by a [passionate community]({red_server}) who contributes "
                 "and creates content for everyone to enjoy.\n\n(c) Cog Creators"
-            ).format(red_repo, twentysix, org, red_server),
+            ),
             inline=False,
         )
         embed.add_field(
-            name="<:Kiki:920617449127309322> Hosting",
+            name="Hosting",
             value=(
-                f"This instance is maintained by {str(kuro)} and hosted with help of {str(lamune)}.\n"
-                f"The host provider is Oracle."
+                f"Shiro is maintained by {str(kuro)} and hosted with help from {str(lamune)}.\n"
+                "The host provider is Oracle."
             ),
             inline=False,
         )
@@ -584,28 +542,25 @@ class Core(commands.commands._RuleDropper, commands.Cog, CoreLogic):
 
         if repo_cog := self.bot.get_cog("Downloader"):
             repos = {c.repo_name for c in await repo_cog.installed_cogs()}
-            cogs_credits = (
-                f"*Use `{ctx.clean_prefix}findcog <command>` to find out who is author of certain command.*\n"
-                + "\n".join(
-                    sorted(
-                        (
-                            f"**[{repo.url.split('/')[4]}]({repo.url})**: {', '.join(repo.author) or repo.url.split('/')[3]}"
-                            for repo in repo_cog._repo_manager.repos
-                            if repo.url.startswith("http") and repo.name in repos
-                        ),
-                        key=lambda k: k.title(),
-                    )
+            command = f"*Use `{ctx.clean_prefix}findcog <command>` to find the author of the cog of a certain command.*\n\n"
+            cogs_credits = "\n".join(
+                sorted(
+                    (
+                        f"**[{repo.url.split('/')[4]}]({repo.url})**: {', '.join(repo.author) or repo.url.split('/')[3]}"
+                        for repo in repo_cog._repo_manager.repos
+                        if repo.url.startswith("http") and repo.name in repos
+                    ),
+                    key=lambda k: k.title(),
                 )
             )
-            for value in pagify(cogs_credits, page_length=1024):
-                # Embed.copy() or copy.copy() will make all embeds link
-                # So if you edit fields on an embed, all embed fields will be the same
+            for credit in pagify(cogs_credits, page_length=1024 - len(command)):
+                # Embed.copy() or copy.copy() will make all embeds link (edit one and all embeds will be edited)
                 # To prevent it, we should use deepcopy.
                 repos_embed = copy.deepcopy(embed)
                 repos_embed.clear_fields()
                 repos_embed.add_field(
                     name="<:Cog:925401264395796481> Cogs & Their Creators",
-                    value=value,
+                    value=command + credit,
                     inline=False,
                 )
                 embeds.append(repos_embed)
@@ -614,11 +569,14 @@ class Core(commands.commands._RuleDropper, commands.Cog, CoreLogic):
     @commands.command()
     async def uptime(self, ctx: commands.Context):
         """Shows [botname]'s uptime."""
-        delta = datetime.datetime.utcnow() - self.bot.uptime
+        delta = discord.utils.utcnow() - self.bot.uptime
         uptime = self.bot.uptime.replace(tzinfo=datetime.timezone.utc)
         uptime_str = humanize_timedelta(timedelta=delta) or _("Less than one second.")
-        embed = discord.Embed(title="Kiki\✨ has been up for:", color=await ctx.embed_color())
-        embed.description = f"{uptime_str}\nSince: <t:{int(uptime.timestamp())}:F>"
+        embed = discord.Embed(
+            color=await ctx.embed_color(),
+            title=f"{self.bot.user.name} has been up for:",
+            description=f"{uptime_str}\nSince: <t:{int(uptime.timestamp())}:F>",
+        )
         await ctx.send(embed=embed)
 
     @commands.group(cls=commands.commands._AlwaysAvailableGroup)
@@ -1424,7 +1382,7 @@ class Core(commands.commands._RuleDropper, commands.Cog, CoreLogic):
         Set the support server invite for the bot.
 
         **Example:**
-        - `[p]inviteset support https://discord.gg/kiki` - Sets the support server url to https://discord.gg/kiki.
+        - `[p]inviteset support https://discord.gg/shiro` - Sets the support server url to https://discord.gg/shiro.
 
         **Arguments:**
         - `<support_server>` - The invite URL to the support server.
@@ -2259,7 +2217,7 @@ class Core(commands.commands._RuleDropper, commands.Cog, CoreLogic):
         await ctx.send(
             _(
                 "You seem to be attempting to sync after recently syncing. Discord does not like it "
-                "when bots sync more often than neccecary, so this command has a cooldown. You "
+                "when bots sync more often than necessary, so this command has a cooldown. You "
                 "should enable/disable all commands you want to change first, and run this command "
                 "one time only after all changes have been made. "
             )
@@ -3961,6 +3919,24 @@ class Core(commands.commands._RuleDropper, commands.Cog, CoreLogic):
                 _("Prefixes cannot start with '/', as it conflicts with Discord's slash commands.")
             )
             return
+        if any(len(x) < MINIMUM_PREFIX_LENGTH for x in prefixes):
+            await ctx.send(
+                _(
+                    "Warning: A prefix is below the recommended length (1 character).\n"
+                    "Do you want to continue?"
+                )
+                + " (yes/no)"
+            )
+            pred = MessagePredicate.yes_or_no(ctx)
+            try:
+                await self.bot.wait_for("message", check=pred, timeout=30)
+            except asyncio.TimeoutError:
+                await ctx.send(_("Response timed out."))
+                return
+            else:
+                if pred.result is False:
+                    await ctx.send(_("Cancelled."))
+                    return
         if any(len(x) > MAX_PREFIX_LENGTH for x in prefixes):
             await ctx.send(
                 _(
@@ -4016,6 +3992,9 @@ class Core(commands.commands._RuleDropper, commands.Cog, CoreLogic):
             await ctx.send(
                 _("Prefixes cannot start with '/', as it conflicts with Discord's slash commands.")
             )
+            return
+        if any(len(x) < MINIMUM_PREFIX_LENGTH for x in prefixes):
+            await ctx.send(_("You cannot have a prefix shorter than 1 character."))
             return
         if any(len(x) > MAX_PREFIX_LENGTH for x in prefixes):
             await ctx.send(_("You cannot have a prefix longer than 25 characters."))
@@ -4322,8 +4301,6 @@ class Core(commands.commands._RuleDropper, commands.Cog, CoreLogic):
     async def helpset_maxpages(self, ctx: commands.Context, pages: int):
         """Set the maximum number of help pages sent in a server channel.
 
-        Note: This setting does not apply to menu help.
-
         If a help message contains more pages than this value, the help message will
         be sent to the command author via DM. This is to help reduce spam in server
         text channels.
@@ -4411,8 +4388,11 @@ class Core(commands.commands._RuleDropper, commands.Cog, CoreLogic):
         The maximum tagline length is 2048 characters.
         This setting only applies to embedded help. If no tagline is specified, the default will be used instead.
 
+        You can use `[\u200bp]` in your tagline, which will be replaced by the bot's prefix.
+
         **Examples:**
         - `[p]helpset tagline Thanks for using the bot!`
+        - `[p]helpset tagline Use [\u200bp]invite to add me to your server.`
         - `[p]helpset tagline` - Resets the tagline to the default.
 
         **Arguments:**
