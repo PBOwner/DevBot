@@ -293,8 +293,9 @@ class ModInfo(MixinMeta):
                         for flag in flags
                     ]
                 )
+
         boosted_servers = []
-        for guild in ctx.bot.guilds:
+        for guild in self.bot.guilds:
             member = guild.get_member(user.id)
             if not member:
                 continue
@@ -303,7 +304,7 @@ class ModInfo(MixinMeta):
                 continue
             boosted_servers.append(guild)
         if user.avatar and (user.avatar.is_animated() or user.banner or boosted_servers):
-            flags_count = len(flags) + 1
+            flags_count += 1
             e = ctx.bot.get_emoji(710871154839126036)
             badge_str += f"\n{e} Nitro Subscriber"
         if badge_str:
