@@ -76,7 +76,13 @@ class Admin(commands.Cog):
         self.bot = bot
 
         self.config = Config.get_conf(self, 8237492837454039, force_registration=True)
-        self.config.register_guild(announce_channel=None, selfroles=[])
+
+        self.config.register_global(serverlocked=False, schema_version=0)
+
+        self.config.register_guild(
+            announce_channel=None,  # Integer ID
+            selfroles=[],  # List of integer ID's
+        )
 
         self.__current_announcer = None
 
@@ -148,7 +154,7 @@ class Admin(commands.Cog):
     async def _addrole(
         self, ctx: commands.Context, member: discord.Member, role: discord.Role, *, check_user=True
     ):
-        if member.get_role(role.id):
+        if member.get_role(role.id) is not None:
             await ctx.send(
                 _("{member.display_name} already has the role {role.name}.").format(
                     role=role, member=member
@@ -179,7 +185,7 @@ class Admin(commands.Cog):
     async def _removerole(
         self, ctx: commands.Context, member: discord.Member, role: discord.Role, *, check_user=True
     ):
-        if not member.get_role(role.id):
+        if member.get_role(role.id) is None:
             await ctx.send(
                 _("{member.display_name} does not have the role {role.name}.").format(
                     role=role, member=member
@@ -213,7 +219,7 @@ class Admin(commands.Cog):
     async def addrole(
         self,
         ctx: commands.Context,
-        role: discord.Role,
+        rolename: discord.Role,
         *,
         user: discord.Member = commands.Author,
     ):
@@ -223,7 +229,7 @@ class Admin(commands.Cog):
         Use double quotes if the role contains spaces.
         If user is left blank it defaults to the author of the command.
         """
-        await self._addrole(ctx, user, role)
+        await self._addrole(ctx, user, rolename)
 
     @commands.command()
     @commands.guild_only()
@@ -231,7 +237,7 @@ class Admin(commands.Cog):
     async def removerole(
         self,
         ctx: commands.Context,
-        role: discord.Role,
+        rolename: discord.Role,
         *,
         user: discord.Member = commands.Author,
     ):
@@ -241,9 +247,7 @@ class Admin(commands.Cog):
         Use double quotes if the role contains spaces.
         If user is left blank it defaults to the author of the command.
         """
-        if user is None:
-            user = ctx.author
-        await self._removerole(ctx, user, role)
+        await self._removerole(ctx, user, rolename)
 
     @commands.group()
     @commands.guild_only()
@@ -302,7 +306,7 @@ class Admin(commands.Cog):
         author = ctx.message.author
         old_name = role.name
         reason = _(
-            '{author} ({author.id}) changed the name of role "{old_name}"" to "{name}"'
+            "{author} ({author.id}) changed the name of role '{old_name}' to '{name}'"
         ).format(author=author, old_name=old_name, name=name)
 
         if not self.pass_user_hierarchy_check(ctx, role):
@@ -399,7 +403,7 @@ class Admin(commands.Cog):
         Server admins must have configured the role as user settable.
         NOTE: The role is case sensitive!
         """
-        if ctx.author.get_role(selfrole.id):
+        if ctx.author.get_role(selfrole.id) is not None:
             return await self._removerole(ctx, ctx.author, selfrole, check_user=False)
         else:
             return await self._addrole(ctx, ctx.author, selfrole, check_user=False)
@@ -540,3 +544,6 @@ class Admin(commands.Cog):
             await ctx.send(_("Selfrole list cleared."))
         else:
             await ctx.send(_("No changes have been made."))
+
+
+# endregion
