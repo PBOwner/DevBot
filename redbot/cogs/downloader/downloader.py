@@ -571,20 +571,20 @@ class Downloader(commands.Cog):
             return
         if name.startswith(".") or name.endswith("."):
             msg = _("Repo names cannot start or end with a dot.")
-            return await ctx.send(error(msg))
+            return await ctx.send(warning(msg))
         if re.match(r"^[a-zA-Z0-9_\-\.]+$", name) is None:
             msg = _(
                 "Repo names can only contain characters A-z, numbers, underscores, hyphens,"
                 " and dots."
             )
-            return await ctx.send(error(msg))
+            return await ctx.send(warning(msg))
         try:
             async with ctx.typing():
                 # noinspection PyTypeChecker
                 repo = await self._repo_manager.add_repo(name=name, url=repo_url, branch=branch)
         except errors.ExistingGitRepo:
             msg = _("The repo name you provided is already in use. Please choose another name.")
-            await ctx.send(error(msg))
+            await ctx.send(warning(msg))
         except errors.AuthenticationError as err:
             msg = _(
                 "Failed to authenticate or repository does not exist."
@@ -798,7 +798,7 @@ class Downloader(commands.Cog):
                 )
                 + message
             )
-            await self.send_pagified(ctx, info(msg))
+            await self.send_pagified(ctx, warning(msg))
         else:
             msg = _(
                 "Cog requirements and shared libraries"
@@ -996,7 +996,7 @@ class Downloader(commands.Cog):
                 ) + humanize_list(uninstalled_cogs)
             if failed_cogs:
                 if len(failed_cogs) > 1:
-                    message += "\n" + info(
+                    message += "\n" + warning(
                         _(
                             "Downloader has removed these cogs from the installed cogs list"
                             " but it wasn't able to find their files: "
@@ -1012,7 +1012,7 @@ class Downloader(commands.Cog):
                         )
                     )
                 else:
-                    message += "\n" + info(
+                    message += "\n" + warning(
                         _(
                             "Downloader has removed this cog from the installed cogs list"
                             " but it wasn't able to find its files: "
@@ -1707,7 +1707,7 @@ class Downloader(commands.Cog):
             message += _("\nUpdated: ") + humanize_list(tuple(map(inline, updated_cognames)))
             if cogs_with_changed_eud_statement:
                 if len(cogs_with_changed_eud_statement) > 1:
-                    message += "\n" + info(
+                    message += "\n" + warning(
                         _("End user data statements of these cogs have changed: ")
                         + humanize_list(tuple(map(inline, cogs_with_changed_eud_statement)))
                         + _("\nYou can use {command} to see the updated statements.\n").format(
@@ -1715,7 +1715,7 @@ class Downloader(commands.Cog):
                         )
                     )
                 else:
-                    message += "\n" + info(
+                    message += "\n" + warning(
                         _("End user data statement of this cog has changed:")
                         + inline(next(iter(cogs_with_changed_eud_statement)))
                         + _("\nYou can use {command} to see the updated statement.\n").format(
@@ -1754,19 +1754,19 @@ class Downloader(commands.Cog):
         if not cogs_to_update:
             message = info(_("No cogs were updated."))
             if failed_reqs:
-                message += (
+                message += error(
                     _("\nFailed to install requirements: ")
                     if len(failed_reqs) > 1
                     else _("\nFailed to install the requirement: ")
                 ) + humanize_list(tuple(map(inline, failed_reqs)))
                 if failed_req_cogs:
-                    message += (
+                    message += info(
                         _("\nThe following cogs were not updated: ")
                         if len(failed_req_cogs) > 1
                         else _("\nThe following cog was not updated: ")
                     ) + humanize_list(tuple(map(inline, {cog.name for cog in failed_req_cogs})))
         if installed_libs:
-            message += "\n" + info(
+            message += "\n" + warning(
                 _(
                     "Some shared libraries were updated, you should restart the bot "
                     "to bring the changes into effect."
