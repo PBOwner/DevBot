@@ -2424,6 +2424,6 @@ class Red(
                         break
         return ret
 
-    async def get_support_server_url(self):
+    async def get_support_server_url(self) -> Optional[str]:
         """Get the support server URL for this bot."""
         return await self._config.support_server()

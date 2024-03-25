@@ -5730,3 +5730,23 @@ class Core(commands.commands._RuleDropper, commands.Cog, CoreLogic):
         )
         await ctx.send(message)
         # We need a link which contains a thank you to other projects which we use at some point.
+
+    @commands.Cog.listener()
+    async def on_message_without_command(self, message: discord.Message):
+        if message.author.bot or message.content != self.bot.user.mention:
+            return
+        ctx: commands.Context = await self.bot.get_context(message)
+        support = await self.bot.get_support_server_url()
+        prefixes = await self.bot.get_prefix(message.channel)
+        embed = discord.Embed(
+            color=await ctx.embed_color(),
+            title=f"[Need help?]({support})" if support else "Need help?",
+            description=f"Use {ctx.clean_prefix + 'help'} to get help!"
+        )
+        embed.title += " <:ShiroShy:1221404270469845094>"
+        embed.add_field(
+            name="My prefixes in this server are:" if message.guild else "My prefixes are:",
+            value=humanize_list(list(map(lambda p: inline(p), prefixes))),
+            inline=False,
+        )
+        await ctx.reply(embed=embed)
