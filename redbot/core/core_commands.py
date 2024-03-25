@@ -5748,4 +5748,4 @@ class Core(commands.commands._RuleDropper, commands.Cog, CoreLogic):
             value=humanize_list(list(map(lambda p: inline(p), prefixes))),
             inline=False,
         )
-        await ctx.reply(embed=embed)
+        await message.reply(embed=embed)
