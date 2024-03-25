@@ -5739,11 +5739,10 @@ class Core(commands.commands._RuleDropper, commands.Cog, CoreLogic):
         prefixes = await self.bot.get_prefix(message.channel)
         embed = discord.Embed(
             color=await self.bot.get_embed_color(message.channel),
-            title="Need help?",
+            title="<:ShiroShy:1221404270469845094> Need help?",
             url=support,
             description=f"Use `{prefixes[0]}help` to get help!"
         )
-        embed.title += " <:ShiroShy:1221404270469845094>"
         embed.add_field(
             name="My prefixes in this server are:" if message.guild else "My prefixes are:",
             value=humanize_list(list(map(lambda p: inline(p), prefixes))),
