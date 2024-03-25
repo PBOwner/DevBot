@@ -5740,7 +5740,8 @@ class Core(commands.commands._RuleDropper, commands.Cog, CoreLogic):
         prefixes = await self.bot.get_prefix(message.channel)
         embed = discord.Embed(
             color=await ctx.embed_color(),
-            title=f"[Need help?]({support})" if support else "Need help?",
+            title="Need help?",
+            url=support,
             description=f"Use {ctx.clean_prefix + 'help'} to get help!"
         )
         embed.title += " <:ShiroShy:1221404270469845094>"
