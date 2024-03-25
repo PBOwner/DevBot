@@ -5735,14 +5735,13 @@ class Core(commands.commands._RuleDropper, commands.Cog, CoreLogic):
     async def on_message_without_command(self, message: discord.Message):
         if message.author.bot or message.content != self.bot.user.mention:
             return
-        ctx: commands.Context = await self.bot.get_context(message)
         support = await self.bot.get_support_server_url()
         prefixes = await self.bot.get_prefix(message.channel)
         embed = discord.Embed(
-            color=await ctx.embed_color(),
+            color=await self.bot.get_embed_color(message.channel),
             title="Need help?",
             url=support,
-            description=f"Use {ctx.clean_prefix + 'help'} to get help!"
+            description=f"Use `{prefixes[0]}help` to get help!"
         )
         embed.title += " <:ShiroShy:1221404270469845094>"
         embed.add_field(
