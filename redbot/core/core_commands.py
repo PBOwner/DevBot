@@ -536,7 +536,7 @@ class Core(commands.commands._RuleDropper, commands.Cog, CoreLogic):
             inline=False,
         )
         embed.add_field(
-            name="Hosting",
+            name="<:ShiroHeart:1220930308342288475> Hosting",
             value=(
                 f"{bot_name} is maintained by {str(kuro)} and hosted with help from {str(lamune)}.\n"
                 "The host provider is Oracle."
@@ -547,8 +547,8 @@ class Core(commands.commands._RuleDropper, commands.Cog, CoreLogic):
 
         if repo_cog := self.bot.get_cog("Downloader"):
             repos = {c.repo_name for c in await repo_cog.installed_cogs()}
-            command = f"*Use `{ctx.clean_prefix}findcog <command>` to find the author of the cog of a certain command.*\n\n"
-            cogs_credits = "\n".join(
+            command = f"*Use `{ctx.clean_prefix}findcog <command>` to find the author of the cog of a certain command.*\n"
+            cogs_credits = "\n" + "\n".join(
                 sorted(
                     (
                         f"**[{repo.url.split('/')[4]}]({repo.url})**: {', '.join(repo.author) or repo.url.split('/')[3]}"
