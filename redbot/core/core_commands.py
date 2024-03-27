@@ -510,8 +510,8 @@ class Core(commands.commands._RuleDropper, commands.Cog, CoreLogic):
         view = InviteView(self.bot)
         await view.start(ctx, embed=embed)
 
-    @commands.hybrid_command()
-    async def credits(self, ctx: commands.Context):
+    @info.command(name="credits")
+    async def info_credits(self, ctx: commands.Context):
         """Shows my credits."""
         bot_name = self.bot.user.name
         org = "https://github.com/Cog-Creators"
@@ -579,8 +579,8 @@ class Core(commands.commands._RuleDropper, commands.Cog, CoreLogic):
     @commands.hybrid_command()
     async def uptime(self, ctx: commands.Context):
         """Shows my uptime."""
-        delta = discord.utils.utcnow() - self.bot.uptime
         uptime = self.bot.uptime.replace(tzinfo=datetime.timezone.utc)
+        delta = discord.utils.utcnow() - uptime
         uptime_str = humanize_timedelta(timedelta=delta) or _("Less than one second.")
         embed = discord.Embed(
             color=await ctx.embed_color(),
