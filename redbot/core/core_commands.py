@@ -433,9 +433,14 @@ class Core(commands.commands._RuleDropper, commands.Cog, CoreLogic):
             content += "\n\n\N{SMIRKING FACE} Nice typo!" if ctx.invoked_with != "ping" else ""
         await message.edit(content=content)
 
-    @commands.hybrid_command(aliases=["info"])
+    @commands.hybrid_group()
+    async def info(self, ctx: commands.Context):
+        """Shows info about something"""
+        pass
+
+    @info.command(name="bot")
     @commands.bot_has_permissions(embed_links=True)
-    async def botinfo(self, ctx: commands.Context):
+    async def info_bot(self, ctx: commands.Context):
         """Shows info about me."""
         embed = discord.Embed(color=await ctx.embed_color())
         app_info = await self.bot.application_info()
@@ -2935,7 +2940,7 @@ class Core(commands.commands._RuleDropper, commands.Cog, CoreLogic):
         if len(text) <= 1024:
             await ctx.bot._config.custom_info.set(text)
             await ctx.send(_("The custom text has been set."))
-            await ctx.invoke(self.botinfo)
+            await ctx.invoke(self.info_bot)
         else:
             await ctx.send(_("Text must be fewer than 1024 characters long."))
 
