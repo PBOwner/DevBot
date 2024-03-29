@@ -265,7 +265,9 @@ class General(commands.Cog):
     async def lmgtfy(self, ctx, *, search_terms: str):
         """Create a lmgtfy link."""
         search_terms = escape(urllib.parse.quote_plus(search_terms), mass_mentions=True)
-        await ctx.send("http://letmegooglethat.com/?q={}".format(search_terms))
+        await ctx.send(
+            f"https://shiro-discordbot.github.io/lmgtfy/search?q={search_terms}&btnK=Google+Search"
+        )
 
     @commands.command()
     @commands.guild_only()
