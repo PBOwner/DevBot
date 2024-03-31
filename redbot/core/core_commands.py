@@ -486,18 +486,12 @@ class Core(commands.commands._RuleDropper, commands.Cog, CoreLogic):
         )
         embed.add_field(name="<:Red:917079459641831474> About Red", value=about, inline=False)
 
-        public = await self.bot.is_invite_url_public()
-        bot_invite = await self.bot.get_invite_url() if public else None
+        bot_install = await self.bot.get_install_url()
         server_invite = await self.bot.get_support_server_url()
-        links = ""
-        if bot_invite:
-            links += f"[Invite {bot_name}]({bot_invite})"
-        if bot_invite and server_invite:
-            links += " | "
+        links = f"[Install {bot_name}]({bot_install})"
         if server_invite:
-            links += f"[Support Server]({server_invite})"
-        if links != "":
-            embed.add_field(name="<:Link:955273752940261376> Links", value=links, inline=False)
+            links += f" | [Support Server]({server_invite})"
+        embed.add_field(name="<:Link:955273752940261376> Links", value=links, inline=False)
 
         embed.set_image(
             url="https://i.pinimg.com/originals/62/29/9a/62299afcedd465b631f9baa9786bd83b.gif"
@@ -1292,7 +1286,7 @@ class Core(commands.commands._RuleDropper, commands.Cog, CoreLogic):
         """Shows my invite url and requirements."""
         bot = self.bot
         title = _("Thanks for Inviting {}").format(bot.user.display_name)
-        bot_invite = await bot.get_invite_url()
+        bot_install = await bot.get_install_url()
         server_invite = await bot.get_support_server_url()
         reqs = []
         if gm := bot.get_cog("GuildManager"):
@@ -1312,7 +1306,7 @@ class Core(commands.commands._RuleDropper, commands.Cog, CoreLogic):
         if not await ctx.embed_requested():
             messages = [
                 bold(title),
-                f"Bot Invite: {bot_invite}",
+                f"Install App: {bot_install}",
                 f"Support Server: {server_invite}",
             ]
             if reqs:
@@ -1322,7 +1316,7 @@ class Core(commands.commands._RuleDropper, commands.Cog, CoreLogic):
 
         embed = discord.Embed(title=title, color=await ctx.embed_color())
         embed.set_thumbnail(url=bot.user.avatar.with_format("png").url)
-        embed.add_field(name="Bot Invite", value=f"[Click Here!]({bot_invite})")
+        embed.add_field(name="Install App", value=f"[Click Here!]({bot_install})")
         embed.add_field(name="Support Server", value=f"[Click Here!]({server_invite})")
         if reqs:
             o = str(bot.get_emoji(914352680627994634))

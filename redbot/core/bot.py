@@ -1447,6 +1447,17 @@ class Red(
         """
         return await self._config.invite_public()
 
+    async def get_install_url(self) -> str:
+        """
+        Generates the install URL for the bot.
+
+        Returns
+        -------
+        str
+            Install URL.
+        """
+        return f"https://discord.com/oauth2/authorize?client_id={self.application_id}"
+
     async def is_admin(self, member: discord.Member) -> bool:
         """Checks if a member is an admin of their guild."""
         try:

@@ -781,19 +781,16 @@ class InviteView(discord.ui.View):
 
     async def start(self, ctx: commands.Context, content: str = None, **kwargs):
         self.ctx = ctx
-        bot_invite = None
-        if await self.bot.is_invite_url_public():
-            bot_invite = await self.bot.get_invite_url()
+        bot_install = await self.bot.get_install_url()
         server_invite = await self.bot.get_support_server_url()
-        if bot_invite:
-            self.add_item(
-                discord.ui.Button(
-                    style=discord.ButtonStyle.link,
-                    label=f"Invite {self.bot.user.name}",
-                    url=bot_invite,
-                    emoji=self.bot.get_emoji(1220931219169087508),
-                )
+        self.add_item(
+            discord.ui.Button(
+                style=discord.ButtonStyle.link,
+                label=f"Install {self.bot.user.name}",
+                url=bot_install,
+                emoji=self.bot.get_emoji(1220931219169087508),
             )
+        )
         if server_invite:
             self.add_item(
                 discord.ui.Button(
