@@ -1,6 +1,6 @@
 <h1 align="center">
   <br>
-  <a href="https://github.com/PBOwner/DevRedBot/tree/V3/develop"><img src="https://imgur.com/pY1WUFX.png" alt="Prism - Bots"></a>
+  <a href="https://github.com/PBOwner/DevRedBot/tree/main"><img src="https://imgur.com/pY1WUFX.png" alt="Prism - Bots"></a>
   <br>
   Prism Bots
   <br>
