@@ -227,7 +227,7 @@ class RedHelpFormatter(HelpFormatterABC):
     While this exists as a class for easy partial overriding,
     most implementations should not need or want a shared state.
 
-    .. warning::
+    .. warning:<:Maintenance:1229490066565365794:>:
 
         This class is documented but may receive changes between
         versions without warning as needed.
