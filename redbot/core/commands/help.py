@@ -159,7 +159,7 @@ class HelpSettings:
 
         return _(
             "Maximum characters per page: {page_char_limit}"
-            "\nMaximum pages per guild (only used if menus are not used): {max_pages_in_guild}"
+            "\nMaximum pages per guild (only used if menus are not used): <a:Maintenance:122949006656536579:> {max_pages_in_guild}"
             "\nHelp is a menu: {use_menus}"
             "\nHelp shows hidden commands: {show_hidden}"
             "\nHelp shows commands aliases: {show_aliases}"
