@@ -56,11 +56,13 @@ def get_outdated_red_messages(pypi_version: str, py_version_req: str) -> Tuple[s
     outdated_red_message = _(
         "Your FuturoBot instance is out of date! {} is the current version, however you are using {}!"
     ).format(pypi_version, red_version)
-    rich_outdated_message = (
-        f"[red]Outdated version![/red]\n"
-        f"[red]!!![/red]Version [cyan]{pypi_version}[/] is available, "
-        f"but you're using [cyan]{red_version}[/][red]!!![/red]"
-    )
+    extra_update = _(
+        "\n\nWhile the following command should work in most scenarios as it is "
+        "based on your current OS, environment, and Python version, "
+        "**we highly recommend you to read the update docs at <{WIP}> and "
+        "make sure there is nothing else that "
+        "needs to be done during the update.**"
+    ).format(docs="https://prismbot.icu")
     current_python = platform.python_version()
     extra_update = _(
         "\n\nWhile the following command should work in most scenarios as it is "
