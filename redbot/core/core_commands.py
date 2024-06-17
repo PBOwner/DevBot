@@ -2293,25 +2293,25 @@ class Core(commands.commands._RuleDropper, commands.Cog, CoreLogic):
         """
         with contextlib.suppress(discord.HTTPException):
             if directly:
-                embed = discord.Embed(title="Shutting Down...", color=await ctx.embed_color())
+                embed = discord.Embed(title="Shutting Down in 3.. 2.. 1...", color=await ctx.embed_color())
                 await ctx.send(embed=embed)
                 await self.bot.shutdown()
                 return
             embed = discord.Embed(
-                title="Are you sure you want to shut down?", color=await ctx.embed_color()
+                title="Are you sure you want to shut down? Type `yes` to shutdown, type `no` to cancel.", color=await ctx.embed_color()
             )
             view = ConfirmView(ctx.author, disable_buttons=True)
             view.message = await ctx.send(embed=embed, view=view)
             await view.wait()
             if view.result:
-                embed = discord.Embed(title="Shutting Down...", color=await ctx.embed_color())
+                embed = discord.Embed(title="Shutting Down in 3.. 2.. 1...", color=await ctx.embed_color())
                 await view.message.edit(embed=embed)
                 await self.bot.shutdown()
             else:
-                embed = discord.Embed(title="Cancelling...", color=await ctx.embed_color())
+                embed = discord.Embed(title="Cancelling in 3.. 2.. 1...", color=await ctx.embed_color())
                 await view.message.edit(embed=embed)
 
-    @commands.command(name="restart")
+    @commands.command(name="restart", aliases=["undead"])
     @commands.is_owner()
     async def _restart(self, ctx: commands.Context, directly: bool = False):
         """Attempts to restart [botname].
@@ -2328,22 +2328,22 @@ class Core(commands.commands._RuleDropper, commands.Cog, CoreLogic):
         """
         with contextlib.suppress(discord.HTTPException):
             if directly:
-                embed = discord.Embed(title="Restarting...", color=await ctx.embed_color())
+                embed = discord.Embed(title="Restart Incoming... 3.. 2.. 1...", color=await ctx.embed_color())
                 await ctx.send(embed=embed)
                 await self.bot.shutdown(restart=True)
                 return
             embed = discord.Embed(
-                title="Are you sure you want to restart?", color=await ctx.embed_color()
+                title="Are you sure you want to restart? Type `yes` to restart or `no` to cancel.", color=await ctx.embed_color()
             )
             view = ConfirmView(ctx.author, disable_buttons=True)
             view.message = await ctx.send(embed=embed, view=view)
             await view.wait()
             if view.result:
-                embed = discord.Embed(title="Restarting...", color=await ctx.embed_color())
+                embed = discord.Embed(title="Restart Incoming... 3.. 2.. 1...", color=await ctx.embed_color())
                 await view.message.edit(embed=embed)
                 await self.bot.shutdown(restart=True)
             else:
-                embed = discord.Embed(title="Cancelling...", color=await ctx.embed_color())
+                embed = discord.Embed(title="Cancelling.. 3.. 2.. 1...", color=await ctx.embed_color())
                 await view.message.edit(embed=embed)
 
     @bank.is_owner_if_bank_global()
