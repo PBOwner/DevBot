@@ -62,7 +62,7 @@ def get_outdated_red_messages(pypi_version: str, py_version_req: str) -> Tuple[s
         "**we highly recommend you to read the update docs at <{WIP}> and "
         "make sure there is nothing else that "
         "needs to be done during the update.**"
-    ).format(docs="https://prismbot.icu")
+    ).format(WIP="https://prismbot.icu")
     current_python = platform.python_version()
     extra_update = _(
         "\n\nWhile the following command should work in most scenarios as it is "
