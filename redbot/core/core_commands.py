@@ -445,22 +445,22 @@ class Core(commands.commands._RuleDropper, commands.Cog, CoreLogic):
         embed = discord.Embed(color=await ctx.embed_color())
         app_info = await self.bot.application_info()
         owner = f"Team {app_info.team.name}" if app_info.team else app_info.owner
-        embed.add_field(name="<:ShiroSleep:1220931264593395722> Instance Owned by", value=owner)
+        embed.add_field(name="<:Sleep:1239525854782947428> Instance Owned by", value=owner)
 
         python = sys.version_info[:3]  # This will return a tuple of (major, minor, micro)
         python_url = "https://www.python.org/downloads/release/python-{}{}{}".format(*python)
         dpy_repo = "https://github.com/Rapptz/discord.py"
-        bot_repo = "https://github.com/Shiro-DiscordBot/Red-DiscordBot"
+        bot_repo = "https://github.com/PBOwner/DevBot"
         python_version = "[`{}.{}.{}`]({})".format(*python, python_url)
         dpy_version = "[`{}`]({})".format(discord.__version__, dpy_repo)
         red_version = "[`{}`]({})".format(__version__, bot_repo)
-        dot = str(self.bot.get_emoji(914352680627994634))
+        dot = str(self.bot.get_emoji(1239519650488778763))
         embed.add_field(
             name="Versions",
             value=(
                 f"<:Python:917079498636279868> {python_version}{dot}"
                 f"<:discordpy:917079482148458557> {dpy_version}{dot}"
-                f"<:Red:917079459641831474> {red_version}"
+                f"<a:Red:1229489938769248327> {red_version}"
             ),
             inline=False,
         )
@@ -469,29 +469,29 @@ class Core(commands.commands._RuleDropper, commands.Cog, CoreLogic):
         custom_info = await self.bot._config.custom_info()
         if custom_info:
             embed.add_field(
-                name=f"<:ShiroHeart:1220930308342288475> About {bot_name}",
+                name=f"<a:shiroheart:1253135006239428709> About {bot_name}",
                 value=custom_info,
                 inline=False,
             )
 
-        red_repo = "https://github.com/Cog-Creators/Red-DiscordBot"
+        fb_repo = "https://github.com/PBOwner/DevBot/"
         contributors = red_repo + "/graphs/contributors"
-        twentysix = "https://github.com/Twentysix26"
-        red_server = "https://discord.gg/red"
+        rosie = "https://github.com/PBOwner"
+        fb_server = "https://discord.gg/DmGBCrRtQz"
         about = (
-            f"{bot_name} is a custom fork of [Red, an open source Discord Bot]({red_repo}) "
-            f"created by [Twentysix]({twentysix}) and [improved by many]({contributors}).\n\n"
-            "Red is backed by a passionate community who contributes and creates content for everyone to enjoy.\n"
-            f"[Join us today]({red_server}) and help us improve!\n\n(c) Cog Creators"
+            f"{bot_name} is the public bot from [FuturoBot]({fb_repo}) "
+            f"created by [Rosie]({rosie}) and [improved by many]({contributors}).\n\n"
+            "FuturoBot is backed by a passionate community who contributes and creates content for everyone to enjoy.\n"
+            f"[Join us today]({fb_server}) and help us improve!\n\n(c) PBOwner"
         )
-        embed.add_field(name="<:Red:917079459641831474> About Red", value=about, inline=False)
+        embed.add_field(name="<:Red:917079459641831474> About FuturoBot", value=about, inline=False)
 
         bot_install = await self.bot.get_install_url()
         server_invite = await self.bot.get_support_server_url()
         links = f"[Install {bot_name}]({bot_install})"
         if server_invite:
             links += f" | [Support Server]({server_invite})"
-        embed.add_field(name="<:Link:955273752940261376> Links", value=links, inline=False)
+        embed.add_field(name="<:Link:1005983052050215042> Links", value=links, inline=False)
 
         embed.set_image(
             url="https://i.pinimg.com/originals/62/29/9a/62299afcedd465b631f9baa9786bd83b.gif"
@@ -508,12 +508,12 @@ class Core(commands.commands._RuleDropper, commands.Cog, CoreLogic):
     async def info_credits(self, ctx: commands.Context):
         """Shows my credits."""
         bot_name = self.bot.user.name
-        org = "https://github.com/Cog-Creators"
-        red_repo = org + "/Red-DiscordBot"
-        twentysix = "https://github.com/Twentysix26"
-        red_server = "https://discord.gg/red"
-        kuro = self.bot.get_user(732425670856147075)
-        lamune = self.bot.get_user(214412567466999818)
+        org = "https://github.com/PBOwner"
+        fb_repo = org + "/DevBot"
+        rosie = "https://github.com/PBOwner"
+        fb_server = "https://discord.gg/DmGBCrRtQz"
+        kuro = self.bot.get_user(1150404678882951198)
+        lamune = self.bot.get_user(380236673294008323)
 
         embeds = []
         embed = discord.Embed(
@@ -527,15 +527,15 @@ class Core(commands.commands._RuleDropper, commands.Cog, CoreLogic):
         embed.add_field(
             name="<:Red:917079459641831474> Red - Discord Bot",
             value=(
-                f"{bot_name} is a custom fork of [Red, an open source Discord Bot]({red_repo}) "
-                f"created by [Twentysix]({twentysix}) and [improved by many]({org}).\n\n"
-                f"Red is backed by a [passionate community]({red_server}) who contributes "
-                "and creates content for everyone to enjoy.\n\n(c) Cog Creators"
+                f"{bot_name} is the public version of [FuturoBot]({fb_repo}) "
+                f"created by [Twentysix]({rosie}) and [improved by many]({org}).\n\n"
+                f"FuturoBot is backed by a [passionate community]({fb_server}) who contributes "
+                "and creates content for everyone to enjoy.\n\n(c) PBOwner"
             ),
             inline=False,
         )
         embed.add_field(
-            name="<:ShiroHeart:1220930308342288475> Hosting",
+            name="<a:Hug:1239528666380374068> Hosting",
             value=(
                 f"{bot_name} is maintained by {str(kuro)} and hosted with help from {str(lamune)}.\n"
                 "The host provider is Oracle."
@@ -5738,7 +5738,7 @@ class Core(commands.commands._RuleDropper, commands.Cog, CoreLogic):
         prefixes = await self.bot.get_prefix(message.channel)
         embed = discord.Embed(
             color=await self.bot.get_embed_color(message.channel),
-            title="<:ShiroShy:1221404270469845094> Need help?",
+            title="<:ShiroShy:1229645908250198016> Need help?",
             url=support,
             description=f"Use `{prefixes[0]}help` to get help!"
         )
