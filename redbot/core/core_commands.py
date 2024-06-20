@@ -455,18 +455,22 @@ class Core(commands.commands._RuleDropper, commands.Cog, CoreLogic):
         dpy_version = "[`{}`]({})".format(discord.__version__, dpy_repo)
         red_version = "[`{}`]({})".format(__version__, bot_repo)
         dot = str(self.bot.get_emoji(1239519650488778763))
+        embed = discord.Embed(title="Various Versions")
         embed.add_field(
             name="Python Version",
-            value=(f"{dot} <:Python:1253162576217505924> {python_version}"),
-            inline=true)
+            value=f"{dot} <:Python:1253162576217505924> {python_version}",
+            inline=True
+        )
         embed.add_field(
             name="FuturoBot Version",
-            value=(f"{dot} <a:Red:1229489938769248327> {red_version}"),
-            inline=true)
+            value=f"{dot} <a:Red:1229489938769248327> {red_version}",
+            inline=True
+        )
         embed.add_field(
             name="Discord.py Version",
-            value=(f"{dot} <:discordpy:1253163908450091045> {dpy_version}"),
-            inline=true)
+            value=f"{dot} <:discordpy:1253163908450091045> {dpy_version}",
+            inline=True
+        )
         bot_name = self.bot.user.name
         custom_info = await self.bot._config.custom_info()
         if custom_info:
