@@ -16,7 +16,7 @@ if TYPE_CHECKING:
     from .commands import Command
     from ..bot import Red
 
-TICK = "<a:Tick:984377373841575936>"
+TICK = "<a:Blue_Tick:1006247260528578561>"
 
 __all__ = ["Context", "GuildContext", "DMContext"]
 
