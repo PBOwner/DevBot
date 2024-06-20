@@ -456,15 +456,17 @@ class Core(commands.commands._RuleDropper, commands.Cog, CoreLogic):
         red_version = "[`{}`]({})".format(__version__, bot_repo)
         dot = str(self.bot.get_emoji(1239519650488778763))
         embed.add_field(
-            name="Versions",
-            value=(
-                f"<:Python:1253162576217505924> {python_version}{dot}"
-                f"<:discordpy:1253163908450091045>> {dpy_version}{dot}"
-                f"<a:Red:1229489938769248327> {red_version}"
-            ),
-            inline=False,
-        )
-
+            name="Python Version",
+            value=(f"{dot} <:Python:1253162576217505924> {python_version}"),
+            inline=true)
+        embed.add_field(
+            name="FuturoBot Version",
+            value=(f"{dot} <a:Red:1229489938769248327> {red_version}"),
+            inline=true)
+        embed.add_field(
+            name="Discord.py Version",
+            value=(f"{dot} <:discordpy:1253163908450091045> {dpy_version}"),
+            inline=true)
         bot_name = self.bot.user.name
         custom_info = await self.bot._config.custom_info()
         if custom_info:
@@ -2298,7 +2300,7 @@ class Core(commands.commands._RuleDropper, commands.Cog, CoreLogic):
                 await self.bot.shutdown()
                 return
             embed = discord.Embed(
-                title="Are you sure you want to shut down? Type `yes` to shutdown, type `no` to cancel.", color=await ctx.embed_color()
+                title="Are you sure you want to shut down? Click `yes` to shutdown, type `no` to cancel.", color=await ctx.embed_color()
             )
             view = ConfirmView(ctx.author, disable_buttons=True)
             view.message = await ctx.send(embed=embed, view=view)
@@ -2333,7 +2335,7 @@ class Core(commands.commands._RuleDropper, commands.Cog, CoreLogic):
                 await self.bot.shutdown(restart=True)
                 return
             embed = discord.Embed(
-                title="Are you sure you want to restart? Type `yes` to restart or `no` to cancel.", color=await ctx.embed_color()
+                title="Are you sure you want to restart? Click `yes` to restart or `no` to cancel.", color=await ctx.embed_color()
             )
             view = ConfirmView(ctx.author, disable_buttons=True)
             view.message = await ctx.send(embed=embed, view=view)
