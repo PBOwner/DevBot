@@ -42,10 +42,10 @@ from rich.text import Text
 log = logging.getLogger("red")
 
 INTRO = r"""
- _  __ _  _     _           ____   _                              _   ____          _   
-| |/ /(_)| | __(_)         |  _ \ (_) ___   ___   ___   _ __   __| | | __ )   ___  | |_ 
+ _  __ _  _     _           ____   _                              _   ____          _
+| |/ /(_)| | __(_)         |  _ \ (_) ___   ___   ___   _ __   __| | | __ )   ___  | |_
 | ' / | || |/ /| |  _____  | | | || |/ __| / __| / _ \ | '__| / _` | |  _ \  / _ \ | __|
-| . \ | ||   < | | |_____| | |_| || |\__ \| (__ | (_) || |   | (_| | | |_) || (_) || |_ 
+| . \ | ||   < | | |_____| | |_| || |\__ \| (__ | (_) || |   | (_| | | |_) || (_) || |_
 |_|\_\|_||_|\_\|_|         |____/ |_||___/ \___| \___/ |_|    \__,_| |____/  \___/  \__|
 """
 
@@ -68,12 +68,15 @@ def get_outdated_red_messages(pypi_version: str, py_version_req: str) -> Tuple[s
         "\n\nWhile the following command should work in most scenarios as it is "
         "based on your current OS, environment, and Python version")
 
+    rich_outdated_message = Text(outdated_red_message, style="bold red")
+
     if not expected_version(current_python, py_version_req):
         extra_update += _(
             "\n\nYou have Python `{py_version}` and this update "
             "requires `{req_py}`; you cannot simply run the update command.\n\n"
         ).format(py_version=current_python, req_py=py_version_req)
         outdated_red_message += extra_update
+        rich_outdated_message += Text(extra_update, style="bold red")
         return outdated_red_message, rich_outdated_message
 
     red_dist = importlib.metadata.distribution("Red-DiscordBot")
@@ -89,13 +92,6 @@ def get_outdated_red_messages(pypi_version: str, py_version_req: str) -> Tuple[s
             if not req.marker.evaluate({"extra": extra}):
                 continue
 
-            # Check that the requirement is met.
-            # This is a bit simplified for our purposes and does not check
-            # whether the requirements of our requirements are met as well.
-            # This could potentially be an issue if we'll ever depend on
-            # a dependency's extra in our extra when we already depend on that
-            # in our base dependencies. However, considering that right now, all
-            # our dependencies are also fully pinned, this should not ever matter.
             if req.name in distributions:
                 dist = distributions[req.name]
             else:
@@ -125,6 +121,7 @@ def get_outdated_red_messages(pypi_version: str, py_version_req: str) -> Tuple[s
         command_2=f"```[p]cog update```",
     )
     outdated_red_message += extra_update
+    rich_outdated_message += Text(extra_update, style="bold red")
     return outdated_red_message, rich_outdated_message
 
 
@@ -165,10 +162,9 @@ def init_events(bot, cli_flags):
         table_general_info.add_row("Storage type", data_manager.storage_type())
 
         table_counts = Table(show_edge=False, show_header=False, box=box.MINIMAL)
-        # String conversion is needed as Rich doesn't deal with ints
         table_counts.add_row("Shards", str(bot.shard_count))
         table_counts.add_row("Servers", str(guilds))
-        if bot.intents.members:  # Lets avoid 0 Unique Users
+        if bot.intents.members:
             table_counts.add_row("Unique Users", str(users))
 
         outdated_red_message = ""
@@ -199,7 +195,6 @@ def init_events(bot, cli_flags):
 
         if invite_url:
             rich_console.print(f"\nInvite URL: {Text(invite_url, style=f'link {invite_url}')}")
-            # We generally shouldn't care if the client supports it or not as Rich deals with it.
         if not guilds:
             rich_console.print(
                 f"Looking for a quick guide on setting up FuturBot? Join the support server! Use ,invite to find out more!')"
