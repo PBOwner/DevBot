@@ -484,7 +484,7 @@ class Core(commands.commands._RuleDropper, commands.Cog, CoreLogic):
             "FuturoBot is backed by a passionate community who contributes and creates content for everyone to enjoy.\n"
             f"[Join us today]({fb_server}) and help us improve!\n\n(c) PBOwner"
         )
-        embed.add_field(name="<:Red:917079459641831474> About FuturoBot", value=about, inline=False)
+        embed.add_field(name="<a:Red:1229489938769248327> About FuturoBot", value=about, inline=False)
 
         bot_install = await self.bot.get_install_url()
         server_invite = await self.bot.get_support_server_url()
@@ -525,10 +525,10 @@ class Core(commands.commands._RuleDropper, commands.Cog, CoreLogic):
         embed.set_thumbnail(url=self.bot.user.avatar.url)
         embed.set_footer(text=f"{bot_name} exists since")
         embed.add_field(
-            name="<:Red:917079459641831474> Red - Discord Bot",
+            name="<a:Red:1229489938769248327> FuturoBot",
             value=(
                 f"{bot_name} is the public version of [FuturoBot]({fb_repo}) "
-                f"created by [Twentysix]({rosie}) and [improved by many]({org}).\n\n"
+                f"created by [Rosie]({rosie}) and [improved by many]({org}).\n\n"
                 f"FuturoBot is backed by a [passionate community]({fb_server}) who contributes "
                 "and creates content for everyone to enjoy.\n\n(c) PBOwner"
             ),
@@ -2591,8 +2591,8 @@ class Core(commands.commands._RuleDropper, commands.Cog, CoreLogic):
         """Delete the bank account of a specified user.
 
         Examples:
-        - `[p]bankset prune user @Twentysix` - Did not confirm. Shows the help message.
-        - `[p]bankset prune user @Twentysix yes`
+        - `[p]bankset prune user @Rosie` - Did not confirm. Shows the help message.
+        - `[p]bankset prune user @Rosie yes`
 
         **Arguments**
 
@@ -2970,8 +2970,8 @@ class Core(commands.commands._RuleDropper, commands.Cog, CoreLogic):
 
         **Examples:**
         - `[p]set status stream` - Clears the activity status.
-        - `[p]set status stream 26 Twentysix is streaming` - Sets the stream to `https://www.twitch.tv/26`.
-        - `[p]set status stream https://twitch.tv/26 Twentysix is streaming` - Sets the URL manually.
+        - `[p]set status stream 26 Rosie is streaming` - Sets the stream to `https://www.twitch.tv/26`.
+        - `[p]set status stream https://twitch.tv/26 Rosie is streaming` - Sets the URL manually.
 
         **Arguments:**
         - `<streamer>` - The twitch streamer to provide a link to. This can be their twitch name or the entire URL.
@@ -5459,7 +5459,7 @@ class Core(commands.commands._RuleDropper, commands.Cog, CoreLogic):
         Makes a user or role immune from automated moderation actions.
 
         **Examples:**
-        - `[p]autoimmune add @Twentysix` - Adds a user.
+        - `[p]autoimmune add @Rosie` - Adds a user.
         - `[p]autoimmune add @Mods` - Adds a role.
 
         **Arguments:**
@@ -5479,7 +5479,7 @@ class Core(commands.commands._RuleDropper, commands.Cog, CoreLogic):
         Remove a user or role from being immune to automated moderation actions.
 
         **Examples:**
-        - `[p]autoimmune remove @Twentysix` - Removes a user.
+        - `[p]autoimmune remove @Rosie` - Removes a user.
         - `[p]autoimmune remove @Mods` - Removes a role.
 
         **Arguments:**
@@ -5499,7 +5499,7 @@ class Core(commands.commands._RuleDropper, commands.Cog, CoreLogic):
         Checks if a user or role would be considered immune from automated actions.
 
         **Examples:**
-        - `[p]autoimmune isimmune @Twentysix`
+        - `[p]autoimmune isimmune @Rosie`
         - `[p]autoimmune isimmune @Mods`
 
         **Arguments:**
