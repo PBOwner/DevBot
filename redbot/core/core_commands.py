@@ -458,8 +458,8 @@ class Core(commands.commands._RuleDropper, commands.Cog, CoreLogic):
         embed.add_field(
             name="Versions",
             value=(
-                f"<:Python:917079498636279868> {python_version}{dot}"
-                f"<:discordpy:917079482148458557> {dpy_version}{dot}"
+                f"<:Python:1253162576217505924> {python_version}{dot}"
+                f"<:discordpy:1253163908450091045>> {dpy_version}{dot}"
                 f"<a:Red:1229489938769248327> {red_version}"
             ),
             inline=False,
