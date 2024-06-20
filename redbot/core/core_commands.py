@@ -475,7 +475,7 @@ class Core(commands.commands._RuleDropper, commands.Cog, CoreLogic):
             )
 
         fb_repo = "https://github.com/PBOwner/DevBot/"
-        contributors = red_repo + "/graphs/contributors"
+        contributors = fb_repo + "/graphs/contributors"
         rosie = "https://github.com/PBOwner"
         fb_server = "https://discord.gg/DmGBCrRtQz"
         about = (
