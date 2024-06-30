@@ -391,7 +391,7 @@ def init_events(bot, cli_flags):
                     "https://media.moddb.com/images/downloads/1/199/198436/MOSHED-2020-2-20-22-48-16.gif",
                 ]
             )
-            support_server = "https://discord.gg/Zef3pD8Yt5"
+            support_server = "https://discord.gg/9f7WV6V8ud"
             embed = discord.Embed(color=discord.Color.red())
             embed.set_image(url=url)
             if await ctx.bot.is_owner(ctx.author):
@@ -405,7 +405,7 @@ def init_events(bot, cli_flags):
                 embed.title = "Uh Oh... An Error Occured!"
                 embed.description = (
                     "It looks like an error has occurred. This has been reported to my owner.\n"
-                    "You can consider joining [ʚ﹕The Cloud House﹕ɞ]({support_server}) , "
+                    "You can consider joining [FuturoBot Support Server]({support_server}) , "
                     "my support server to receive assistance or provide context."
                 ).format(support_server=support_server)
                 embed.add_field(name="Error Details", value=description)
@@ -423,7 +423,7 @@ def init_events(bot, cli_flags):
                             style=discord.ButtonStyle.link,
                             label="Support Server",
                             url=server_invite,
-                            emoji=ctx.bot.get_emoji(1220931046871273604),
+                            emoji=ctx.bot.get_emoji(1005983057272115211),
                         )
                     )
             try:
