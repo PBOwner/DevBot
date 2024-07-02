@@ -524,7 +524,7 @@ class Filter(commands.Cog):
         if any(role.id in immune_roles for role in author.roles):
             return
 
-                guild_data = await self.config.guild(guild).all()
+        guild_data = await self.config.guild(guild).all()
         member_data = await self.config.member(author).all()
         filter_count = guild_data["filterban_count"]
         filter_time = guild_data["filterban_time"]
