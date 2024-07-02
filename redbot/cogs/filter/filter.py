@@ -12,7 +12,6 @@ from redbot.core.utils.chat_formatting import pagify, humanize_list
 
 _ = Translator("Filter", __file__)
 
-
 @cog_i18n(_)
 class Filter(commands.Cog):
     """This cog is designed for "filtering" unwanted words and phrases from a server.
@@ -32,6 +31,7 @@ class Filter(commands.Cog):
             "filterban_time": 0,
             "filter_names": False,
             "filter_default_name": "John Doe",
+            "immune_roles": []
         }
         default_member_settings = {"filter_count": 0, "next_reset_time": 0}
         default_channel_settings = {"filter": []}
@@ -138,6 +138,42 @@ class Filter(commands.Cog):
                 guild_data["filterban_count"] = count
                 guild_data["filterban_time"] = timeframe
             await ctx.send(_("Count and time have been set."))
+
+    @filterset.command(name="addimmune")
+    async def filter_add_immune(self, ctx: commands.Context, role: discord.Role):
+        """Add a role to the filter immune list.
+
+        Users with this role will not have their messages filtered.
+
+        Example:
+        - `[p]filterset addimmune @RoleName`
+
+        **Arguments:**
+        - `<role>` The role to add to the immune list.
+        """
+        async with self.config.guild(ctx.guild).immune_roles() as immune_roles:
+            if role.id not in immune_roles:
+                immune_roles.append(role.id)
+                await ctx.send(_("Role added to the immune list."))
+            else:
+                await ctx.send(_("Role is already in the immune list."))
+
+    @filterset.command(name="removeimmune")
+    async def filter_remove_immune(self, ctx: commands.Context, role: discord.Role):
+        """Remove a role from the filter immune list.
+
+        Example:
+        - `[p]filterset removeimmune @RoleName`
+
+        **Arguments:**
+        - `<role>` The role to remove from the immune list.
+        """
+        async with self.config.guild(ctx.guild).immune_roles() as immune_roles:
+            if role.id in immune_roles:
+                immune_roles.remove(role.id)
+                await ctx.send(_("Role removed from the immune list."))
+            else:
+                await ctx.send(_("Role was not in the immune list."))
 
     @commands.group(name="filter")
     @commands.guild_only()
@@ -482,7 +518,13 @@ class Filter(commands.Cog):
     async def check_filter(self, message: discord.Message):
         guild = message.guild
         author = message.author
-        guild_data = await self.config.guild(guild).all()
+
+        # Check if author has an immune role
+        immune_roles = await self.config.guild(guild).immune_roles()
+        if any(role.id in immune_roles for role in author.roles):
+            return
+
+                guild_data = await self.config.guild(guild).all()
         member_data = await self.config.member(author).all()
         filter_count = guild_data["filterban_count"]
         filter_time = guild_data["filterban_time"]
@@ -608,3 +650,6 @@ class Filter(commands.Cog):
             except discord.HTTPException:
                 pass
             return
+
+def setup(bot: Red):
+    bot.add_cog(Filter(bot))
