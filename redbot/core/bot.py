@@ -2510,4 +2510,4 @@ class Red(
         if shard_id is not None:
             log.info(f"Guild {guild.name} (ID: {guild.id}) removed from shard {shard_id}")
     # Restart the bot to ensure proper shard handling
-    await self.shutdown(restart=True)
+        await self.shutdown(restart=True)
