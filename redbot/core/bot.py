@@ -5,12 +5,11 @@ import inspect
 import logging
 import os
 import platform
-import time
 import shutil
 import sys
 import contextlib
 import weakref
-from collections import namedtuple, OrderedDict, defaultdict, deque
+from collections import namedtuple, OrderedDict
 from datetime import datetime
 from importlib.machinery import ModuleSpec
 from importlib.util import module_from_spec
@@ -90,43 +89,6 @@ def _is_submodule(parent, child):
 
 class _NoOwnerSet(RuntimeError):
     """Raised when there is no owner set for the instance that is trying to start."""
-
-
-class RateLimiter:
-    def __init__(self, rate: float, per: float):
-        self.rate = rate
-        self.per = per
-        self.allowance = rate
-        self.last_check = time.monotonic()
-
-    def is_allowed(self) -> bool:
-        current = time.monotonic()
-        time_passed = current - self.last_check
-        self.last_check = current
-        self.allowance += time_passed * (self.rate / self.per)
-        if self.allowance > self.rate:
-            self.allowance = self.rate
-        if self.allowance < 1.0:
-            return False
-        else:
-            self.allowance -= 1.0
-            return True
-
-
-class Monitoring:
-    def __init__(self):
-        self.command_counts = defaultdict(int)
-        self.command_times = defaultdict(deque)
-
-    def log_command(self, command_name: str):
-        self.command_counts[command_name] += 1
-        self.command_times[command_name].append(time.monotonic())
-
-    def get_command_rate(self, command_name: str, period: float = 60.0) -> float:
-        now = time.monotonic()
-        while self.command_times[command_name] and self.command_times[command_name][0] < now - period:
-            self.command_times[command_name].popleft()
-        return len(self.command_times[command_name]) / period
 
 
 # Order of inheritance here matters.
@@ -276,10 +238,6 @@ class Red(
         self._main_dir = bot_dir
         self._cog_mgr = CogManager()
         self._use_team_features = cli_flags.use_team_features
-        self.shard_count = kwargs.get('shard_count', 1)
-        self.guild_shard_map = {}
-        self.rate_limiter = RateLimiter(rate=5, per=10)  # 5 commands per 10 seconds
-        self.monitoring = Monitoring()
         super().__init__(*args, help_command=None, tree_cls=RedTree, **kwargs)
         # Do not manually use the help formatter attribute here, see `send_help_for`,
         # for a documented API. The internals of this object are still subject to change.
@@ -1665,8 +1623,7 @@ class Red(
 
     async def process_commands(self, message: discord.Message, /):
         """
-        Same as base method, but dispatches an additional event for
-        cogs
+        Same as base method, but dispatches an additional event for cogs
         which want to handle normal messages differently to command
         messages,  without the overhead of additional get_context calls
         per cog.
@@ -1700,11 +1657,6 @@ class Red(
                     message.channel,
                 )
             else:
-                if not self.rate_limiter.is_allowed():
-                    await ctx.send("You are being rate limited. Please try again later.")
-                    return
-                self.monitoring.log_command(ctx.command.qualified_name)
-                log.info(f"Command rate for {ctx.command.qualified_name}: {self.monitoring.get_command_rate(ctx.command.qualified_name)} commands per second")
                 await self.invoke(ctx)
         else:
             ctx = None
@@ -2486,29 +2438,3 @@ class Red(
     async def get_support_server_url(self) -> Optional[str]:
         """Get the support server URL for this bot."""
         return await self._config.support_server()
-
-    async def on_ready(self):
-        await super().on_ready()
-        self.distribute_guilds_across_shards()
-
-    def distribute_guilds_across_shards(self):
-        shard_guild_count = defaultdict(int)
-        for guild in self.guilds:
-            shard_id = (guild.id >> 22) % self.shard_count
-            self.guild_shard_map[guild.id] = shard_id
-            shard_guild_count[shard_id] += 1
-
-        for shard_id, count in shard_guild_count.items():
-            log.info(f"Shard {shard_id} is handling {count} guilds.")
-
-    async def on_guild_join(self, guild: discord.Guild):
-        shard_id = (guild.id >> 22) % self.shard_count
-        self.guild_shard_map[guild.id] = shard_id
-        log.info(f"Guild {guild.name} (ID: {guild.id}) added to shard {shard_id}")
-
-    async def on_guild_remove(self, guild: discord.Guild):
-        shard_id = self.guild_shard_map.pop(guild.id, None)
-        if shard_id is not None:
-            log.info(f"Guild {guild.name} (ID: {guild.id}) removed from shard {shard_id}")
-    # Restart the bot to ensure proper shard handling
-        await self.shutdown(restart=True)
