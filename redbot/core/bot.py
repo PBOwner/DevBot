@@ -2224,7 +2224,7 @@ class Red(
         delay = await self._config.guild(guild).delete_delay()
 
         if delay == -1:
-        return
+            return
 
         async def _delete_helper(m):
             with contextlib.suppress(discord.HTTPException):
