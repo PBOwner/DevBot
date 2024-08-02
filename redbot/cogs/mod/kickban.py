@@ -16,18 +16,18 @@ from redbot.core.utils.chat_formatting import (
     format_perms_list,
 )
 from redbot.core.utils.mod import get_audit_reason
-from .abc import MixinMeta
-from .utils import is_allowed_by_hierarchy
+from redbot.cogs.mod import Mod
 
 log = logging.getLogger("red.mod")
 _ = i18n.Translator("Mod", __file__)
 
-class KickBanMixin(MixinMeta):
+class KickBanMixin(Mod):
     """
     Kick and ban commands and tasks go here.
     """
 
     def __init__(self, bot):
+        super().__init__(bot)
         self.bot = bot
         self.config = Config.get_conf(self, identifier=1234567890, force_registration=True)
         default_guild = {
@@ -35,6 +35,50 @@ class KickBanMixin(MixinMeta):
             "ban_message": "You have been banned from {guild}. Reason: {reason}",
         }
         self.config.register_guild(**default_guild)
+
+    async def _voice_perm_check(
+        self,
+        ctx: commands.Context,
+        user_voice_state: Optional[discord.VoiceState],
+        **perms: bool
+    ) -> bool:
+        """Check if the bot and user have sufficient permissions for voicebans.
+
+        This also verifies that the user's voice state and connected
+        channel are not ``None``.
+
+        Returns
+        -------
+        bool
+            ``True`` if the permissions are sufficient and the user has
+            a valid voice state.
+
+        """
+        if user_voice_state is None or user_voice_state.channel is None:
+            await ctx.send(_("That user is not in a voice channel."))
+            return False
+        voice_channel: discord.VoiceChannel = user_voice_state.channel
+        required_perms = discord.Permissions()
+        required_perms.update(**perms)
+        if not voice_channel.permissions_for(ctx.me) >= required_perms:
+            await ctx.send(
+                _("I require the {perms} permission(s) in that user's channel to do that.").format(
+                    perms=format_perms_list(required_perms)
+                )
+            )
+            return False
+        if (
+            ctx.permission_state is commands.PermState.NORMAL
+            and not voice_channel.permissions_for(ctx.author) >= required_perms
+        ):
+            await ctx.send(
+                _(
+                    "You must have the {perms} permission(s) in that user's channel to use this "
+                    "command."
+                ).format(perms=format_perms_list(required_perms))
+            )
+            return False
+        return True
 
     @commands.command()
     @commands.guild_only()
@@ -389,7 +433,7 @@ class KickBanMixin(MixinMeta):
                 until=None,
                 channel=None,
             )
-            await ctx.send(_("Mmmm. Yes. That felt awesome. Do it again 🤤"))
+            await ctx.send(_("Mmmm. Yes. That felt awesome. Do it again "))
 
     @commands.command()
     @commands.guild_only()
