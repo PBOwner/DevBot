@@ -5,7 +5,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Optional, Tuple, Union
 
 import discord
-from redbot.core import commands, i18n, modlog
+from redbot.core import commands, i18n, modlog, Config
 from redbot.core.commands import RawUserIdConverter
 from redbot.core.utils import AsyncIter
 from redbot.core.utils.chat_formatting import (
@@ -22,87 +22,112 @@ from .utils import is_allowed_by_hierarchy
 log = logging.getLogger("red.mod")
 _ = i18n.Translator("Mod", __file__)
 
-
 class KickBanMixin(MixinMeta):
     """
     Kick and ban commands and tasks go here.
     """
 
-    @staticmethod
-    async def get_invite_for_reinvite(ctx: commands.Context, max_age: int = 86400) -> str:
-        """Handles the reinvite logic for getting an invite to send the newly unbanned user"""
-        guild = ctx.guild
-        my_perms: discord.Permissions = guild.me.guild_permissions
-        if my_perms.manage_guild or my_perms.administrator:
-            if guild.vanity_url is not None:
-                return guild.vanity_url
-            invites = await guild.invites()
-        else:
-            invites = []
-        for inv in invites:  # Loop through the invites for the guild
-            if not (inv.max_uses or inv.max_age or inv.temporary):
-                # Invite is for the guild's default channel,
-                # has unlimited uses, doesn't expire, and
-                # doesn't grant temporary membership
-                # (i.e. they won't be kicked on disconnect)
-                return inv.url
-        else:  # No existing invite found that is valid
-            channels_and_perms = (
-                (channel, channel.permissions_for(guild.me)) for channel in guild.text_channels
-            )
-            channel = next(
-                (channel for channel, perms in channels_and_perms if perms.create_instant_invite),
-                None,
-            )
-            if channel is None:
-                return ""
-            try:
-                # Create invite that expires after max_age
-                return (await channel.create_invite(max_age=max_age)).url
-            except discord.HTTPException:
-                return ""
+    def __init__(self, bot):
+        self.bot = bot
+        self.config = Config.get_conf(self, identifier=1234567890, force_registration=True)
+        default_guild = {
+            "kick_message": "You have been kicked from {guild}. Reason: {reason}",
+            "ban_message": "You have been banned from {guild}. Reason: {reason}",
+        }
+        self.config.register_guild(**default_guild)
 
-    @staticmethod
-    async def _voice_perm_check(
-        ctx: commands.Context, user_voice_state: Optional[discord.VoiceState], **perms: bool
-    ) -> bool:
-        """Check if the bot and user have sufficient permissions for voicebans.
-
-        This also verifies that the user's voice state and connected
-        channel are not ``None``.
-
-        Returns
-        -------
-        bool
-            ``True`` if the permissions are sufficient and the user has
-            a valid voice state.
-
+    @commands.command()
+    @commands.guild_only()
+    @commands.bot_has_permissions(kick_members=True)
+    @commands.admin_or_permissions(kick_members=True)
+    async def kick(self, ctx: commands.Context, member: discord.Member, *, reason: str = None):
         """
-        if user_voice_state is None or user_voice_state.channel is None:
-            await ctx.send(_("That user is not in a voice channel."))
-            return False
-        voice_channel: discord.VoiceChannel = user_voice_state.channel
-        required_perms = discord.Permissions()
-        required_perms.update(**perms)
-        if not voice_channel.permissions_for(ctx.me) >= required_perms:
+        Kick a user.
+        """
+        author = ctx.author
+        guild = ctx.guild
+
+        if author == member:
             await ctx.send(
-                _("I require the {perms} permission(s) in that user's channel to do that.").format(
-                    perms=format_perms_list(required_perms)
+                _("I cannot let you do that. Self-harm is bad {emoji}").format(
+                    emoji="\N{PENSIVE FACE}"
                 )
             )
-            return False
-        if (
-            ctx.permission_state is commands.PermState.NORMAL
-            and not voice_channel.permissions_for(ctx.author) >= required_perms
-        ):
+            return
+        elif not await is_allowed_by_hierarchy(self.bot, self.config, guild, author, member):
             await ctx.send(
                 _(
-                    "You must have the {perms} permission(s) in that user's channel to use this "
-                    "command."
-                ).format(perms=format_perms_list(required_perms))
+                    "I cannot let you do that. You are "
+                    "not higher than the user in the role "
+                    "hierarchy."
+                )
             )
-            return False
-        return True
+            return
+        elif ctx.guild.me.top_role <= member.top_role or member == ctx.guild.owner:
+            await ctx.send(_("I cannot do that due to Discord hierarchy rules."))
+            return
+        audit_reason = get_audit_reason(author, reason, shorten=True)
+        custom_message = await self.config.guild(guild).kick_message()
+        if reason is None:
+            reason = _("No reason was given.")
+
+        message = custom_message.format(guild=guild.name, reason=reason)
+
+        toggle = await self.config.guild(guild).dm_on_kickban()
+        if toggle:
+            with contextlib.suppress(discord.HTTPException):
+                await member.send(message)
+        try:
+            await guild.kick(member, reason=audit_reason)
+            log.info("%s (%s) kicked %s (%s)", author, author.id, member, member.id)
+        except discord.errors.Forbidden:
+            await ctx.send(_("I'm not allowed to do that."))
+        except Exception:
+            log.exception(
+                "%s (%s) attempted to kick %s (%s), but an error occurred.",
+                author,
+                author.id,
+                member,
+                member.id,
+            )
+        else:
+            await modlog.create_case(
+                self.bot,
+                guild,
+                ctx.message.created_at,
+                "kick",
+                member,
+                author,
+                reason,
+                until=None,
+                channel=None,
+            )
+            await ctx.send(_("User has been kicked."))
+
+    @commands.command()
+    @commands.guild_only()
+    @commands.bot_has_permissions(ban_members=True)
+    @commands.admin_or_permissions(ban_members=True)
+    async def ban(
+        self,
+        ctx: commands.Context,
+        user: Union[discord.Member, RawUserIdConverter],
+        days: Optional[int] = None,
+        *,
+        reason: str = None,
+    ):
+        """Ban a user from this server and optionally delete days of messages."""
+        guild = ctx.guild
+        if days is None:
+            days = await self.config.guild(guild).default_days()
+        if isinstance(user, int):
+            user = self.bot.get_user(user) or discord.Object(id=user)
+
+        success_, message = await self.ban_user(
+            user=user, ctx=ctx, days=days, reason=reason, create_modlog_case=True
+        )
+
+        await ctx.send(message)
 
     async def ban_user(
         self,
@@ -114,8 +139,6 @@ class KickBanMixin(MixinMeta):
     ) -> Tuple[bool, str]:
         author = ctx.author
         guild = ctx.guild
-
-        removed_temp = False
 
         if not (0 <= days <= 7):
             return False, _("Invalid days. Must be between 0 and 7.")
@@ -138,19 +161,15 @@ class KickBanMixin(MixinMeta):
             elif guild.me.top_role <= user.top_role or user == guild.owner:
                 return False, _("I cannot do that due to Discord hierarchy rules.")
 
+            custom_message = await self.config.guild(guild).ban_message()
+            if reason is None:
+                reason = _("No reason was given.")
+            message = custom_message.format(guild=guild.name, reason=reason)
+
             toggle = await self.config.guild(guild).dm_on_kickban()
             if toggle:
                 with contextlib.suppress(discord.HTTPException):
-                    em = discord.Embed(
-                        title=bold(_("You have been banned from {guild}.").format(guild=guild)),
-                        color=await self.bot.get_embed_color(user),
-                    )
-                    em.add_field(
-                        name=_("**Reason**"),
-                        value=reason if reason is not None else _("No reason was given."),
-                        inline=False,
-                    )
-                    await user.send(embed=em)
+                    await user.send(message)
 
             ban_type = "ban"
         else:
@@ -164,7 +183,6 @@ class KickBanMixin(MixinMeta):
                 if user.id in tempbans:
                     async with self.config.guild(guild).current_tempbans() as tempbans:
                         tempbans.remove(user.id)
-                    removed_temp = True
                 else:
                     return (
                         False,
@@ -175,41 +193,32 @@ class KickBanMixin(MixinMeta):
 
         audit_reason = get_audit_reason(author, reason, shorten=True)
 
-        if removed_temp:
+        try:
+            await guild.ban(user, reason=audit_reason, delete_message_seconds=days * 86400)
             log.info(
-                "%s (%s) upgraded the tempban for %s to a permaban.", author, author.id, user.id
+                "%s (%s) %sned %s (%s), deleting %s days worth of messages.",
+                author,
+                author.id,
+                ban_type,
+                user,
+                user.id,
+                days,
             )
-            success_message = _(
-                "User with ID {user_id} was upgraded from a temporary to a permanent ban."
-            ).format(user_id=user.id)
-        else:
-            user_handle = str(user) if isinstance(user, discord.abc.User) else "Unknown"
-            try:
-                await guild.ban(user, reason=audit_reason, delete_message_seconds=days * 86400)
-                log.info(
-                    "%s (%s) %sned %s (%s), deleting %s days worth of messages.",
-                    author,
-                    author.id,
-                    ban_type,
-                    user_handle,
-                    user.id,
-                    days,
-                )
-                success_message = _("Mmmm. Yes. That felt awesome. Do it again 🤤")
-            except discord.Forbidden:
-                return False, _("I'm not allowed to do that.")
-            except discord.NotFound:
-                return False, _("User with ID {user_id} not found").format(user_id=user.id)
-            except Exception:
-                log.exception(
-                    "%s (%s) attempted to %s %s (%s), but an error occurred.",
-                    author,
-                    author.id,
-                    ban_type,
-                    user_handle,
-                    user.id,
-                )
-                return False, _("An unexpected error occurred.")
+            success_message = _("User has been banned.")
+        except discord.Forbidden:
+            return False, _("I'm not allowed to do that.")
+        except discord.NotFound:
+            return False, _("User with ID {user_id} not found").format(user_id=user.id)
+        except Exception:
+            log.exception(
+                "%s (%s) attempted to %s %s (%s), but an error occurred.",
+                author,
+                author.id,
+                ban_type,
+                user,
+                user.id,
+            )
+            return False, _("An unexpected error occurred.")
 
         if create_modlog_case:
             await modlog.create_case(
@@ -225,6 +234,25 @@ class KickBanMixin(MixinMeta):
             )
 
         return True, success_message
+
+    @commands.group()
+    @commands.guild_only()
+    @commands.admin_or_permissions(administrator=True)
+    async def setkickbanmsg(self, ctx: commands.Context):
+        """Set custom messages for kick and ban."""
+        pass
+
+    @setkickbanmsg.command(name="kick")
+    async def set_kick_msg(self, ctx: commands.Context, *, message: str):
+        """Set the custom kick message."""
+        await self.config.guild(ctx.guild).kick_message.set(message)
+        await ctx.send(_("Custom kick message set."))
+
+    @setkickbanmsg.command(name="ban")
+    async def set_ban_msg(self, ctx: commands.Context, *, message: str):
+        """Set the custom ban message."""
+        await self.config.guild(ctx.guild).ban_message.set(message)
+        await ctx.send(_("Custom ban message set."))
 
     async def tempban_expirations_task(self) -> None:
         while True:
