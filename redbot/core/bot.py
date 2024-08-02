@@ -2223,7 +2223,7 @@ class Red(
         message = ctx.message
         delay = await self._config.guild(guild).delete_delay()
 
-        if delay == -1
+        if delay == -1:
         return
 
         async def _delete_helper(m):
