@@ -56,7 +56,7 @@ def success(text: str) -> str:
         The new message.
 
     """
-    return f"<a:Tick:1229489744891609172> {text}"
+    return f"<a:Tick:1268688936449081387> {text}"
 
 
 def error(text: str) -> str:
@@ -73,7 +73,7 @@ def error(text: str) -> str:
         The new message.
 
     """
-    return f"<a:Wrong:1254077826341011579> {text}"
+    return f"<a:Wrong:1268688947438161990> {text}"
 
 
 def question(text: str) -> str:
@@ -90,7 +90,7 @@ def question(text: str) -> str:
         The new message.
 
     """
-    return f"<a:questionmark:1254079142601822258> {text}"
+    return f"<a:questionmark:1269146039500406875> {text}"
 
 
 def info(text: str) -> str:
@@ -107,7 +107,7 @@ def info(text: str) -> str:
         The new message.
 
     """
-    return f"<:Info:1254079500753436703> {text}"
+    return f"<a:info:1269146547610976256> {text}"
 
 
 def warning(text: str) -> str:
@@ -124,7 +124,7 @@ def warning(text: str) -> str:
         The new message.
 
     """
-    return f"<a:Warning:1254077829713232014> {text}"
+    return f"<a:Warning:1269146763957108808> {text}"
 
 
 def bold(text: str, escape_formatting: bool = True) -> str:
