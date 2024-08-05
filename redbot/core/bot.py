@@ -94,13 +94,6 @@ class DynamicShardedBot(commands.GroupMixin, RPCMixin, dpy_commands.AutoShardedB
     """Custom AutoShardedBot that dynamically manages shards."""
 
     def __init__(self, *args, cli_flags=None, bot_dir: Path = Path.cwd(), **kwargs):
-        self._cli_flags = cli_flags
-        self._main_dir = bot_dir
-        self._config = Config.get_core_conf(force_registration=False)
-        self._shutdown_mode = ExitCodes.CRITICAL
-        self._owner_id_overwrite = cli_flags.owner
-        self._cog_mgr = CogManager()
-        self._use_team_features = cli_flags.use_team_features
 
         # Calculate the shard count dynamically
         shard_count = kwargs.pop("shard_count", 1)  # Default to 1 if not provided
