@@ -90,6 +90,51 @@ def _is_submodule(parent, child):
 class _NoOwnerSet(RuntimeError):
     """Raised when there is no owner set for the instance that is trying to start."""
 
+class DynamicShardedBot(commands.GroupMixin, RPCMixin, dpy_commands.AutoShardedBot):
+    """Custom AutoShardedBot that dynamically manages shards."""
+
+    def __init__(self, *args, cli_flags=None, bot_dir: Path = Path.cwd(), **kwargs):
+        self._cli_flags = cli_flags
+        self._main_dir = bot_dir
+        self._config = Config.get_core_conf(force_registration=False)
+        self._shutdown_mode = ExitCodes.CRITICAL
+        self._owner_id_overwrite = cli_flags.owner
+        self._cog_mgr = CogManager()
+        self._use_team_features = cli_flags.use_team_features
+
+        # Calculate the shard count dynamically
+        shard_count = kwargs.pop("shard_count", 1)  # Default to 1 if not provided
+        kwargs["shard_count"] = shard_count
+
+        super().__init__(*args, **kwargs)
+
+        # Add additional initialization if needed
+        self._permissions_hooks: List[commands.CheckPredicate] = []
+        self._red_ready = asyncio.Event()
+        self._red_before_invoke_objs: Set[PreInvokeCoroutine] = set()
+        self._deletion_requests: MutableMapping[int, asyncio.Lock] = weakref.WeakValueDictionary()
+
+    async def on_ready(self):
+        # Check if we need to adjust the shard count
+        await self.check_shard_count()
+
+    async def check_shard_count(self):
+        guild_count = len(self.guilds)
+        required_shard_count = max(1, (guild_count + 14) // 15)  # Ensure at least 1 shard
+
+        if required_shard_count != self.shard_count:
+            log.info(f"Adjusting shard count to {required_shard_count} due to {guild_count} guilds.")
+            await self.restart_bot(required_shard_count)
+
+    async def restart_bot(self, new_shard_count: int):
+        # Save the new shard count to a file or environment variable as needed
+        # For example, using an environment variable:
+        os.environ["DISCORD_SHARD_COUNT"] = str(new_shard_count)
+
+        # Restart the bot
+        self._shutdown_mode = ExitCodes.RESTART
+        await self.close()
+        sys.exit(ExitCodes.RESTART)
 
 # Order of inheritance here matters.
 # d.py autoshardedbot should be at the end
@@ -99,7 +144,6 @@ class Red(
     commands.GroupMixin, RPCMixin, dpy_commands.bot.AutoShardedBot
 ):  # pylint: disable=no-member # barely spurious warning caused by shadowing
     """Our subclass of discord.ext.commands.AutoShardedBot"""
-
     def __init__(self, *args, cli_flags=None, bot_dir: Path = Path.cwd(), **kwargs):
         self._shutdown_mode = ExitCodes.CRITICAL
         self._cli_flags = cli_flags
@@ -132,7 +176,7 @@ class Red(
             help__tagline="",
             help__use_tick=False,
             help__react_timeout=30,
-            description="Innova",
+            description="Shiro Discord Bot",
             invite_public=False,
             invite_perm=0,
             invite_commands_scope=False,
@@ -152,7 +196,6 @@ class Red(
             enabled_user_commands={},
             enabled_message_commands={},
         )
-
         self._config.register_guild(
             prefix=[],
             whitelist=[],
@@ -169,22 +212,17 @@ class Red(
             locale=None,
             regional_format=None,
         )
-
         self._config.register_channel(embeds=None, ignored=False)
         self._config.register_user(embeds=None)
-
         self._config.init_custom("COG_DISABLE_SETTINGS", 2)
         self._config.register_custom("COG_DISABLE_SETTINGS", disabled=None)
-
         self._config.init_custom(CUSTOM_GROUPS, 2)
         self._config.register_custom(CUSTOM_GROUPS)
-
         # {COMMAND_NAME: {GUILD_ID: {...}}}
         # GUILD_ID=0 for global setting
         self._config.init_custom(COMMAND_SCOPE, 2)
         self._config.register_custom(COMMAND_SCOPE, embeds=None)
         # TODO: add cache for embed settings
-
         self._config.init_custom(SHARED_API_TOKENS, 2)
         self._config.register_custom(SHARED_API_TOKENS)
         self._prefix_cache = PrefixManager(self._config, cli_flags)
@@ -193,67 +231,50 @@ class Red(
         self._whiteblacklist_cache = WhitelistBlacklistManager(self._config)
         self._i18n_cache = I18nManager(self._config)
         self._bypass_cooldowns = True
-
         async def prefix_manager(bot, message) -> List[str]:
             prefixes = await self._prefix_cache.get_prefixes(message.guild)
             if cli_flags.mentionable:
                 return when_mentioned_or(*prefixes)(bot, message)
             return prefixes
-
         if "command_prefix" not in kwargs:
             kwargs["command_prefix"] = prefix_manager
-
         if "owner_id" in kwargs:
             raise RuntimeError("Red doesn't accept owner_id kwarg, use owner_ids instead.")
-
         if "intents" not in kwargs:
             intents = discord.Intents.all()
             for intent_name in cli_flags.disable_intent:
                 setattr(intents, intent_name, False)
             kwargs["intents"] = intents
-
         self._owner_id_overwrite = cli_flags.owner
-
         if "owner_ids" in kwargs:
             kwargs["owner_ids"] = set(kwargs["owner_ids"])
         else:
             kwargs["owner_ids"] = set()
         kwargs["owner_ids"].update(cli_flags.co_owner)
-
         if "command_not_found" not in kwargs:
             kwargs["command_not_found"] = "Command {} not found.\n{}"
-
         if "allowed_mentions" not in kwargs:
             kwargs["allowed_mentions"] = discord.AllowedMentions(everyone=False, roles=False)
-
         message_cache_size = cli_flags.message_cache_size
         if cli_flags.no_message_cache:
             message_cache_size = None
         kwargs["max_messages"] = message_cache_size
         self._max_messages = message_cache_size
-
         self._uptime = None
         self._checked_time_accuracy = None
-
         self._main_dir = bot_dir
         self._cog_mgr = CogManager()
         self._use_team_features = cli_flags.use_team_features
-
-        # Calculate the shard count dynamically
-        shard_count = kwargs.pop("shard_count", 4)  # Default to 4 if not provided
-        kwargs["shard_count"] = shard_count
-
         super().__init__(*args, help_command=None, tree_cls=RedTree, **kwargs)
         # Do not manually use the help formatter attribute here, see `send_help_for`,
         # for a documented API. The internals of this object are still subject to change.
         self._help_formatter = commands.help.RedHelpFormatter()
         self.add_command(commands.help.red_help)
-
         self._permissions_hooks: List[commands.CheckPredicate] = []
         self._red_ready = asyncio.Event()
         self._red_before_invoke_objs: Set[PreInvokeCoroutine] = set()
-
         self._deletion_requests: MutableMapping[int, asyncio.Lock] = weakref.WeakValueDictionary()
+
 
     def set_help_formatter(self, formatter: commands.help.HelpFormatterABC):
         """
