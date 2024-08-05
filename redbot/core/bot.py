@@ -240,7 +240,8 @@ class Red(
         self._use_team_features = cli_flags.use_team_features
 
         # Specify the shard count
-        kwargs["shard_count"] = 20
+        shard_count = kwargs.get("shard_count", 1)
+        kwargs["shard_count"] = shard_count
 
         super().__init__(*args, help_command=None, tree_cls=RedTree, **kwargs)
         # Do not manually use the help formatter attribute here, see `send_help_for`,
