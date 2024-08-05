@@ -239,8 +239,8 @@ class Red(
         self._cog_mgr = CogManager()
         self._use_team_features = cli_flags.use_team_features
 
-        # Specify the shard count
-        shard_count = kwargs.get("shard_count", 1)
+        # Calculate the shard count dynamically
+        shard_count = self.calculate_shard_count()
         kwargs["shard_count"] = shard_count
 
         super().__init__(*args, help_command=None, tree_cls=RedTree, **kwargs)
@@ -254,6 +254,15 @@ class Red(
         self._red_before_invoke_objs: Set[PreInvokeCoroutine] = set()
 
         self._deletion_requests: MutableMapping[int, asyncio.Lock] = weakref.WeakValueDictionary()
+
+    def calculate_shard_count(self) -> int:
+        """
+        Calculate the number of shards based on the number of guilds.
+        Ensures 1 shard per 10 guilds.
+        """
+        guild_count = len(self.guilds)
+        shard_count = max(1, (guild_count + 9) // 10)  # Ensure at least 1 shard
+        return shard_count
 
     def set_help_formatter(self, formatter: commands.help.HelpFormatterABC):
         """
