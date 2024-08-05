@@ -136,14 +136,10 @@ class DynamicShardedBot(commands.GroupMixin, RPCMixin, dpy_commands.AutoShardedB
         await self.close()
         sys.exit(ExitCodes.RESTART)
 
-# Order of inheritance here matters.
-# d.py autoshardedbot should be at the end
-# all of our mixins should happen before,
-# and must include a call to super().__init__ unless they do not provide an init
-class Red(
-    commands.GroupMixin, RPCMixin, dpy_commands.bot.AutoShardedBot
-):  # pylint: disable=no-member # barely spurious warning caused by shadowing
+
+class Red(DynamicShardedBot):
     """Our subclass of discord.ext.commands.AutoShardedBot"""
+
     def __init__(self, *args, cli_flags=None, bot_dir: Path = Path.cwd(), **kwargs):
         self._shutdown_mode = ExitCodes.CRITICAL
         self._cli_flags = cli_flags
@@ -196,6 +192,7 @@ class Red(
             enabled_user_commands={},
             enabled_message_commands={},
         )
+
         self._config.register_guild(
             prefix=[],
             whitelist=[],
@@ -212,17 +209,22 @@ class Red(
             locale=None,
             regional_format=None,
         )
+
         self._config.register_channel(embeds=None, ignored=False)
         self._config.register_user(embeds=None)
+
         self._config.init_custom("COG_DISABLE_SETTINGS", 2)
         self._config.register_custom("COG_DISABLE_SETTINGS", disabled=None)
+
         self._config.init_custom(CUSTOM_GROUPS, 2)
         self._config.register_custom(CUSTOM_GROUPS)
+
         # {COMMAND_NAME: {GUILD_ID: {...}}}
         # GUILD_ID=0 for global setting
         self._config.init_custom(COMMAND_SCOPE, 2)
         self._config.register_custom(COMMAND_SCOPE, embeds=None)
         # TODO: add cache for embed settings
+
         self._config.init_custom(SHARED_API_TOKENS, 2)
         self._config.register_custom(SHARED_API_TOKENS)
         self._prefix_cache = PrefixManager(self._config, cli_flags)
@@ -231,50 +233,63 @@ class Red(
         self._whiteblacklist_cache = WhitelistBlacklistManager(self._config)
         self._i18n_cache = I18nManager(self._config)
         self._bypass_cooldowns = True
+
         async def prefix_manager(bot, message) -> List[str]:
             prefixes = await self._prefix_cache.get_prefixes(message.guild)
             if cli_flags.mentionable:
                 return when_mentioned_or(*prefixes)(bot, message)
             return prefixes
+
         if "command_prefix" not in kwargs:
             kwargs["command_prefix"] = prefix_manager
+
         if "owner_id" in kwargs:
             raise RuntimeError("Red doesn't accept owner_id kwarg, use owner_ids instead.")
+
         if "intents" not in kwargs:
             intents = discord.Intents.all()
             for intent_name in cli_flags.disable_intent:
                 setattr(intents, intent_name, False)
             kwargs["intents"] = intents
+
         self._owner_id_overwrite = cli_flags.owner
+
         if "owner_ids" in kwargs:
             kwargs["owner_ids"] = set(kwargs["owner_ids"])
         else:
             kwargs["owner_ids"] = set()
         kwargs["owner_ids"].update(cli_flags.co_owner)
+
         if "command_not_found" not in kwargs:
             kwargs["command_not_found"] = "Command {} not found.\n{}"
+
         if "allowed_mentions" not in kwargs:
             kwargs["allowed_mentions"] = discord.AllowedMentions(everyone=False, roles=False)
+
         message_cache_size = cli_flags.message_cache_size
         if cli_flags.no_message_cache:
             message_cache_size = None
         kwargs["max_messages"] = message_cache_size
         self._max_messages = message_cache_size
+
         self._uptime = None
         self._checked_time_accuracy = None
+
         self._main_dir = bot_dir
         self._cog_mgr = CogManager()
         self._use_team_features = cli_flags.use_team_features
+
         super().__init__(*args, help_command=None, tree_cls=RedTree, **kwargs)
         # Do not manually use the help formatter attribute here, see `send_help_for`,
         # for a documented API. The internals of this object are still subject to change.
         self._help_formatter = commands.help.RedHelpFormatter()
         self.add_command(commands.help.red_help)
+
         self._permissions_hooks: List[commands.CheckPredicate] = []
         self._red_ready = asyncio.Event()
         self._red_before_invoke_objs: Set[PreInvokeCoroutine] = set()
-        self._deletion_requests: MutableMapping[int, asyncio.Lock] = weakref.WeakValueDictionary()
 
+        self._deletion_requests: MutableMapping[int, asyncio.Lock] = weakref.WeakValueDictionary()
 
     def set_help_formatter(self, formatter: commands.help.HelpFormatterABC):
         """
