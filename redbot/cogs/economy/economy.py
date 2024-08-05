@@ -192,7 +192,6 @@ class Economy(commands.Cog):
 
         credits = random.randint(min_credits, max_credits)
         await bank.deposit_credits(message.author, credits)
-        logger.info(f"{message.author.display_name} received {credits} credits for a message.")
 
     @guild_only_check()
     @commands.command()
