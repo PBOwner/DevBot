@@ -135,7 +135,9 @@ class Economy(commands.Cog):
 
     def __init__(self, bot: Red):
         super().__init__()
-        self.bot = bot
+        self.bot = bot  # Ensure bot is set
+        global _bot_ref
+        _bot_ref = self.bot  # Set the global reference
         self.config = Config.get_conf(self, 1256844281)
         self.config.register_guild(**self.default_guild)
         self.config.register_global(**self.default_global)
@@ -436,7 +438,6 @@ class Economy(commands.Cog):
 
         if top < 1:
             top = 10
-
         base_embed = discord.Embed(title=_("Economy Leaderboard"))
         if show_global and await bank.is_global():
             # show_global is only applicable if bank is global
