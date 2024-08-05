@@ -17,8 +17,6 @@ from redbot.core.utils.menus import menu
 
 T_ = Translator("Economy", __file__)
 
-logger = logging.getLogger("red.economy")
-
 BLANK = "<:Blank:1014880410980855828>"
 VARIATION_SELECTOR = "\N{VARIATION SELECTOR-16}"
 ARROW = "\N{BLACK RIGHT-POINTING TRIANGLE}" + VARIATION_SELECTOR
