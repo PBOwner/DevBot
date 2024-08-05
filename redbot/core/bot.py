@@ -72,7 +72,7 @@ SHARED_API_TOKENS = "SHARED_API_TOKENS"
 
 log = logging.getLogger("red")
 
-__all__ = ("Red",)
+__all__ = ("Innova",)
 
 NotMessage = namedtuple("NotMessage", "guild")
 
@@ -240,7 +240,7 @@ class Red(
         self._use_team_features = cli_flags.use_team_features
 
         # Calculate the shard count dynamically
-        shard_count = kwargs.pop("shard_count", 1)  # Default to 1 if not provided
+        shard_count = kwargs.pop("shard_count", 4)  # Default to 4 if not provided
         kwargs["shard_count"] = shard_count
 
         super().__init__(*args, help_command=None, tree_cls=RedTree, **kwargs)
