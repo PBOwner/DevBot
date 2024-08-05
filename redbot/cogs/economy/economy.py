@@ -26,13 +26,13 @@ MOCK_MEMBER = namedtuple("Member", "id guild")
 
 
 class SMReel(Enum):
-    eggplant = "🍆"
-    peach = "🍑"
-    cherries = "🍒"
-    heart = "❤️"
-    flc = "🍀"
-    coin = "🪙"  # noqa: E999
-    bag = "💰"
+    eggplant = ""
+    peach = ""
+    cherries = ""
+    heart = ""
+    flc = ""
+    coin = ""  # noqa: E999
+    bag = ""
 
 
 _ = lambda s: s
@@ -126,6 +126,9 @@ class Economy(commands.Cog):
         "SLOT_MAX": 100,
         "SLOT_TIME": 5,
         "REGISTER_CREDITS": 0,
+        "CREDITS_PER_MESSAGE": {"default_min": 1, "default_max": 20, "channels": {}},
+        "WHITELISTED_CHANNELS": [],
+        "BLACKLISTED_CHANNELS": [],
     }
     default_global = default_guild
     default_member = {"next_daily": 0, "next_weekly": 0, "next_monthly": 0, "last_slot": 0}
@@ -153,6 +156,45 @@ class Economy(commands.Cog):
             return
 
         await self.config.user_from_id(user_id).clear()
+
+    @commands.Cog.listener()
+    async def on_message(self, message: discord.Message):
+        if message.author.bot:
+            return
+
+        ctx = await self.bot.get_context(message)
+        if ctx.valid:
+            return
+
+        guild = message.guild
+        channel = message.channel
+
+        if not guild:
+            return
+
+        if await self.config.guild(guild).BLACKLISTED_CHANNELS():
+            if channel.id in await self.config.guild(guild).BLACKLISTED_CHANNELS():
+                return
+
+        if await self.config.guild(guild).WHITELISTED_CHANNELS():
+            if channel.id not in await self.config.guild(guild).WHITELISTED_CHANNELS():
+                return
+
+        credits_per_message = await self.config.guild(guild).CREDITS_PER_MESSAGE()
+        default_min = credits_per_message["default_min"]
+        default_max = credits_per_message["default_max"]
+        channel_credits = credits_per_message["channels"].get(str(channel.id), None)
+
+        if channel_credits:
+            min_credits = channel_credits["min"]
+            max_credits = channel_credits["max"]
+        else:
+            min_credits = default_min
+            max_credits = default_max
+
+        credits = random.randint(min_credits, max_credits)
+        await bank.deposit_credits(message.author, credits)
+        logger.info(f"{message.author.display_name} received {credits} credits for a message.")
 
     @guild_only_check()
     @commands.command()
@@ -657,12 +699,23 @@ class Economy(commands.Cog):
                     "Slot cooldown: {slot_time}\n"
                     "Payday amount: {payday_amount}\n"
                     "Payday cooldown: {payday_time}\n"
+                    "Credits per message (default): {default_min}-{default_max}\n"
+                    "Whitelisted channels: {whitelisted_channels}\n"
+                    "Blacklisted channels: {blacklisted_channels}\n"
                 ).format(
                     slot_min=humanize_number(await conf.SLOT_MIN()),
                     slot_max=humanize_number(await conf.SLOT_MAX()),
                     slot_time=humanize_number(await conf.SLOT_TIME()),
                     payday_time=humanize_number(await conf.PAYDAY_TIME()),
                     payday_amount=humanize_number(await conf.PAYDAY_CREDITS()),
+                    default_min=humanize_number(await conf.CREDITS_PER_MESSAGE.default_min()),
+                    default_max=humanize_number(await conf.CREDITS_PER_MESSAGE.default_max()),
+                    whitelisted_channels=", ".join(
+                        [str(ch) for ch in await conf.WHITELISTED_CHANNELS()]
+                    ),
+                    blacklisted_channels=", ".join(
+                        [str(ch) for ch in await conf.BLACKLISTED_CHANNELS()]
+                    ),
                 )
             )
         )
@@ -873,6 +926,158 @@ class Economy(commands.Cog):
                     ).format(
                         num=humanize_number(creds), currency=credits_name, role_name=role.name
                     )
+                )
+
+    @economyset.command()
+    async def setcreditsrange(self, ctx: commands.Context, min_credits: int, max_credits: int):
+        """Set the default range for random credits per message.
+
+        Example:
+        - `[p]economyset setcreditsrange 1 50`
+
+        **Arguments**
+
+        - `<min_credits>` The minimum credits per message.
+        - `<max_credits>` The maximum credits per message.
+        """
+        guild = ctx.guild
+        if min_credits < 0 or max_credits < 0 or min_credits > max_credits:
+            await ctx.send(_("Invalid range. Ensure that 0 <= min_credits <= max_credits."))
+            return
+
+        await self.config.guild(guild).CREDITS_PER_MESSAGE.default_min.set(min_credits)
+        await self.config.guild(guild).CREDITS_PER_MESSAGE.default_max.set(max_credits)
+        await ctx.send(
+            _("Default credits per message range set to {min_credits}-{max_credits}.").format(
+                min_credits=min_credits, max_credits=max_credits
+            )
+        )
+
+    @economyset.command()
+    async def setchannelcreditsrange(self, ctx: commands.Context, channel: discord.TextChannel, min_credits: int, max_credits: int):
+        """Set the credits per message range for a specific channel.
+
+        Example:
+        - `[p]economyset setchannelcreditsrange #general 5 25`
+
+        **Arguments**
+
+        - `<channel>` The channel to set the credits range for.
+        - `<min_credits>` The minimum credits per message.
+        - `<max_credits>` The maximum credits per message.
+        """
+        guild = ctx.guild
+        if min_credits < 0 or max_credits < 0 or min_credits > max_credits:
+            await ctx.send(_("Invalid range. Ensure that 0 <= min_credits <= max_credits."))
+            return
+
+        async with self.config.guild(guild).CREDITS_PER_MESSAGE.channels() as channels:
+            channels[str(channel.id)] = {"min": min_credits, "max": max_credits}
+
+        await ctx.send(
+            _("Credits per message range for {channel} set to {min_credits}-{max_credits}.").format(
+                channel=channel.name, min_credits=min_credits, max_credits=max_credits
+            )
+        )
+
+    @economyset.command()
+    async def whitelist(self, ctx: commands.Context, channel: discord.TextChannel):
+        """Whitelist a channel for earning credits per message.
+
+        Example:
+        - `[p]economyset whitelist #general`
+
+        **Arguments**
+
+        - `<channel>` The channel to whitelist.
+        """
+        guild = ctx.guild
+        async with self.config.guild(guild).WHITELISTED_CHANNELS() as whitelisted_channels:
+            if channel.id not in whitelisted_channels:
+                whitelisted_channels.append(channel.id)
+                await ctx.send(
+                    _("Channel {channel} has been whitelisted for earning credits per message.").format(
+                        channel=channel.name
+                    )
+                )
+            else:
+                await ctx.send(
+                    _("Channel {channel} is already whitelisted.").format(channel=channel.name)
+                )
+
+    @economyset.command()
+    async def blacklist(self, ctx: commands.Context, channel: discord.TextChannel):
+        """Blacklist a channel from earning credits per message.
+
+        Example:
+        - `[p]economyset blacklist #general`
+
+        **Arguments**
+
+        - `<channel>` The channel to blacklist.
+        """
+        guild = ctx.guild
+        async with self.config.guild(guild).BLACKLISTED_CHANNELS() as blacklisted_channels:
+            if channel.id not in blacklisted_channels:
+                blacklisted_channels.append(channel.id)
+                await ctx.send(
+                    _("Channel {channel} has been blacklisted from earning credits per message.").format(
+                        channel=channel.name
+                    )
+                )
+            else:
+                await ctx.send(
+                    _("Channel {channel} is already blacklisted.").format(channel=channel.name)
+                )
+
+    @economyset.command()
+    async def unwhitelist(self, ctx: commands.Context, channel: discord.TextChannel):
+        """Remove a channel from the whitelist.
+
+        Example:
+        - `[p]economyset unwhitelist #general`
+
+        **Arguments**
+
+        - `<channel>` The channel to remove from the whitelist.
+        """
+        guild = ctx.guild
+        async with self.config.guild(guild).WHITELISTED_CHANNELS() as whitelisted_channels:
+            if channel.id in whitelisted_channels:
+                whitelisted_channels.remove(channel.id)
+                await ctx.send(
+                    _("Channel {channel} has been removed from the whitelist.").format(
+                        channel=channel.name
+                    )
+                )
+            else:
+                await ctx.send(
+                    _("Channel {channel} is not in the whitelist.").format(channel=channel.name)
+                )
+
+    @economyset.command()
+    async def unblacklist(self, ctx: commands.Context, channel: discord.TextChannel):
+        """Remove a channel from the blacklist.
+
+        Example:
+        - `[p]economyset unblacklist #general`
+
+        **Arguments**
+
+        - `<channel>` The channel to remove from the blacklist.
+        """
+        guild = ctx.guild
+        async with self.config.guild(guild).BLACKLISTED_CHANNELS() as blacklisted_channels:
+            if channel.id in blacklisted_channels:
+                blacklisted_channels.remove(channel.id)
+                await ctx.send(
+                    _("Channel {channel} has been removed from the blacklist.").format(
+                        channel=channel.name
+                    )
+                )
+            else:
+                await ctx.send(
+                    _("Channel {channel} is not in the blacklist.").format(channel=channel.name)
                 )
 
     # What would I ever do without stackoverflow?
